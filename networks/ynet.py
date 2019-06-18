@@ -545,6 +545,6 @@ class YNet3D(nn.Module):
 
             # save model every epoch
             if epoch % test_freq == 0 and test_freq > 0:
-                torch.save(self, os.path.join(log_dir, 'checkpoint_', str(epoch), '.pytorch'))
+                torch.save(self, os.path.join(log_dir, 'checkpoint_'+str(epoch), '.pytorch'))
 
         writer.close()
