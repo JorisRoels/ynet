@@ -498,13 +498,13 @@ class YNet3D(nn.Module):
         return total_loss_avg
 
     # trains the network
-    def train_net(self, train_loader_source, train_loader_target, test_data, test_labels,
-                  optimizer, loss_seg_fn, loss_rec_fn, scheduler=None, epochs=100, test_freq=1, print_stats=1,
-                  log_dir=None, write_images_freq=1):
+    def train_net(self, train_loader_source, train_loader_target, optimizer, loss_seg_fn, loss_rec_fn, test_data=None,
+                  test_labels=None, scheduler=None, epochs=100, test_freq=1, print_stats=1, log_dir=None,
+                  write_images_freq=1):
 
         # log everything if necessary
         if log_dir is not None:
-            writer = SummaryWriter(log_dir=log_dir)
+            writer = SummaryWriter(logdir=log_dir)
         else:
             writer = None
 
@@ -526,7 +526,7 @@ class YNet3D(nn.Module):
                 writer.add_scalar('learning_rate', float(scheduler.get_lr()[0]), epoch)
 
             # test the model for one epoch is necessary
-            if epoch % test_freq == 0 and test_freq > 0:
+            if epoch % test_freq == 0 and test_freq > 0 and test_data is not None and test_labels is not None:
                 a, p, r, f, j, d = validate(self, test_data, test_labels, train_loader_source.dataset.input_shape,
                                             val_file=os.path.join(log_dir, 'validation_'+str(epoch)+'.npy'),
                                             dtypes=('uint8', 'uint8', 'float64'), keys=('image', 'image', 'labels'),
@@ -544,6 +544,7 @@ class YNet3D(nn.Module):
                     torch.save(self, os.path.join(log_dir, 'best_checkpoint.pytorch'))
 
             # save model every epoch
-            torch.save(self, os.path.join(log_dir, 'checkpoint.pytorch'))
+            if epoch % test_freq == 0 and test_freq > 0:
+                torch.save(self, os.path.join(log_dir, 'checkpoint_', str(epoch), '.pytorch'))
 
         writer.close()
