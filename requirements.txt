@@ -2,11 +2,9 @@ numpy
 tifffile
 scipy
 scikit-image
-imgaug
 torch
 torchvision
-h5py
-progressbar2
-tensorboardX
-tensorflow
-jupyter
+tensorboard
+augmentation
+neuralnets
+future
