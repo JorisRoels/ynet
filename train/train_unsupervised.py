@@ -9,15 +9,14 @@ import argparse
 import datetime
 import os
 
-import numpy as np
-import torch
 import torch.optim as optim
-from neuralnets.data.datasets import StronglyLabeledVolumeDataset, UnlabeledVolumeDataset
+from neuralnets.data.datasets import StronglyLabeledVolumeDataset
+from neuralnets.util.augmentation import *
 from neuralnets.util.losses import CrossEntropyLoss, MSELoss
-from neuralnets.util.preprocessing import get_augmenter2d
-from neuralnets.util.validation import validate
 from neuralnets.util.tools import set_seed
+from neuralnets.util.validation import validate
 from torch.utils.data import DataLoader
+from torchvision.transforms import Compose
 
 from networks.ynet import YNet2D
 
@@ -29,6 +28,7 @@ parser = argparse.ArgumentParser()
 
 # logging parameters
 parser.add_argument("--seed", help="Seed for randomization", type=int, default=0)
+parser.add_argument("--device", help="GPU device for computations", type=int, default=0)
 parser.add_argument("--log_dir", help="Logging directory", type=str, default="ynet_unsupervised")
 parser.add_argument("--print_stats", help="Number of iterations between each time to log training losses",
                     type=int, default=50)
@@ -45,7 +45,7 @@ parser.add_argument("--norm", help="Normalization in the network (batch or insta
 parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
 
 # regularization parameters
-parser.add_argument('--lambda_rec', help='Regularization parameters for Y-Net reconstruction', type=float, default=1e-2)
+parser.add_argument('--lambda_rec', help='Regularization parameters for Y-Net reconstruction', type=float, default=1e-1)
 
 # optimization parameters
 parser.add_argument("--lr", help="Learning rate of the optimization", type=float, default=1e-3)
@@ -80,22 +80,28 @@ if not os.path.exists(args.log_dir):
 """
 input_shape = (1, args.input_size[0], args.input_size[1])
 print('[%s] Loading data' % (datetime.datetime.now()))
-augmenter_src = get_augmenter2d([args.input_size[0], args.input_size[1]], include_segmentation=True)
-augmenter_tar = get_augmenter2d([args.input_size[0], args.input_size[1]], include_segmentation=False)
-res_src = (1, 5, 5)
-res_tar = (1, 4.6, 4.6)
-scaling = np.divide(res_src, res_tar)
-train_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/training.tif'),
-                                         os.path.join(args.data_dir, 'EM/EPFL/training_groundtruth.tif'),
-                                         input_shape=input_shape, scaling=scaling)
-train_tar = UnlabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/data_larger.tif'),
-                                   input_shape=input_shape)
-test_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/testing.tif'),
-                                        os.path.join(args.data_dir, 'EM/EPFL/testing_groundtruth.tif'),
-                                        input_shape=input_shape, scaling=scaling)
-test_tar = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/data.tif'),
-                                        os.path.join(args.data_dir, 'EM/VNC/mito_labels.tif'),
-                                        input_shape=input_shape)
+augmenter_src = Compose([ToFloatTensor(device=args.device), Rotate90(), FlipX(prob=0.5), FlipY(prob=0.5),
+                         ContrastAdjust(adj=0.1, include_segmentation=True),
+                         RandomDeformation_2D(input_shape[1:], grid_size=(64, 64), sigma=0.01, device=args.device,
+                                              include_segmentation=True),
+                         AddNoise(sigma_max=0.05, include_segmentation=True)])
+augmenter_tar = Compose([ToFloatTensor(device=args.device), Rotate90(), FlipX(prob=0.5), FlipY(prob=0.5),
+                         ContrastAdjust(adj=0.1, include_segmentation=True),
+                         RandomDeformation_2D(input_shape[1:], grid_size=(64, 64), sigma=0.01, device=args.device,
+                                              include_segmentation=True),
+                         AddNoise(sigma_max=0.05, include_segmentation=True)])
+train_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/train'),
+                                         os.path.join(args.data_dir, 'EM/EPFL/train_labels'),
+                                         input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
+test_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/test'),
+                                        os.path.join(args.data_dir, 'EM/EPFL/test_labels'),
+                                        input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
+train_tar = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/train'),
+                                         os.path.join(args.data_dir, 'EM/VNC/train_labels'),
+                                         input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
+test_tar = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/test'),
+                                        os.path.join(args.data_dir, 'EM/VNC/test_labels'),
+                                        input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
 train_loader_src = DataLoader(train_src, batch_size=args.train_batch_size)
 train_loader_tar = DataLoader(train_tar, batch_size=args.train_batch_size)
 test_loader_src = DataLoader(test_src, batch_size=args.train_batch_size)
@@ -129,11 +135,11 @@ net.train_net_unsupervised(train_loader_src, train_loader_tar, test_loader_src, 
 """
 net = net.get_unet()
 validate(net, test_tar.data, test_tar.labels, args.input_size, batch_size=args.test_batch_size,
-         write_dir=os.path.join(args.write_dir, 'segmentation_final'),
+         write_dir=os.path.join(args.log_dir, 'segmentation_final'),
          val_file=os.path.join(args.log_dir, 'validation_final.npy'))
 net = torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch')).get_unet()
 validate(net, test_tar.data, test_tar.labels, args.input_size, batch_size=args.test_batch_size,
-         write_dir=os.path.join(args.write_dir, 'segmentation_best'),
+         write_dir=os.path.join(args.log_dir, 'segmentation_best'),
          val_file=os.path.join(args.log_dir, 'validation_best.npy'))
 
 print('[%s] Finished!' % (datetime.datetime.now()))

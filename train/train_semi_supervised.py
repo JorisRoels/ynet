@@ -9,15 +9,14 @@ import argparse
 import datetime
 import os
 
-import numpy as np
-import torch
 import torch.optim as optim
 from neuralnets.data.datasets import StronglyLabeledVolumeDataset, UnlabeledVolumeDataset
+from neuralnets.util.augmentation import *
 from neuralnets.util.losses import CrossEntropyLoss, MSELoss
-from neuralnets.util.preprocessing import get_augmenter2d
-from neuralnets.util.validation import validate
 from neuralnets.util.tools import set_seed
+from neuralnets.util.validation import validate
 from torch.utils.data import DataLoader
+from torchvision.transforms import Compose
 
 from networks.ynet import YNet2D
 
@@ -29,6 +28,7 @@ parser = argparse.ArgumentParser()
 
 # logging parameters
 parser.add_argument("--seed", help="Seed for randomization", type=int, default=0)
+parser.add_argument("--device", help="GPU device for computations", type=int, default=0)
 parser.add_argument("--log_dir", help="Logging directory", type=str, default="ynet_semi_supervised")
 parser.add_argument("--print_stats", help="Number of iterations between each time to log training losses",
                     type=int, default=50)
@@ -80,30 +80,35 @@ if not os.path.exists(args.log_dir):
 """
 input_shape = (1, args.input_size[0], args.input_size[1])
 print('[%s] Loading data' % (datetime.datetime.now()))
-augmenter_src = get_augmenter2d([args.input_size[0], args.input_size[1]], include_segmentation=True)
-augmenter_tar = get_augmenter2d([args.input_size[0], args.input_size[1]], include_segmentation=False)
-res_src = (1, 5, 5)
-res_tar = (1, 4.6, 4.6)
-scaling = np.divide(res_src, res_tar)
-train_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/training.tif'),
-                                         os.path.join(args.data_dir, 'EM/EPFL/training_groundtruth.tif'),
-                                         input_shape=input_shape, scaling=scaling)
-train_tar_ul = UnlabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/data_larger.tif'),
-                                      input_shape=input_shape)
-train_tar_l = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/data_train.tif'),
-                                           os.path.join(args.data_dir, 'EM/VNC/mito_labels_train.tif'),
-                                           input_shape=input_shape, scaling=scaling)
-test_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/testing.tif'),
-                                        os.path.join(args.data_dir, 'EM/EPFL/testing_groundtruth.tif'),
-                                        input_shape=input_shape, scaling=scaling)
-test_tar = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/data_test.tif'),
-                                        os.path.join(args.data_dir, 'EM/VNC/mito_labels_test.tif'),
-                                        input_shape=input_shape)
+augmenter_src = Compose([ToFloatTensor(device=args.device), Rotate90(), FlipX(prob=0.5), FlipY(prob=0.5),
+                         ContrastAdjust(adj=0.1, include_segmentation=True),
+                         RandomDeformation_2D(input_shape[1:], grid_size=(64, 64), sigma=0.01, device=args.device,
+                                              include_segmentation=True),
+                         AddNoise(sigma_max=0.05, include_segmentation=True)])
+augmenter_tar = Compose([ToFloatTensor(device=args.device), Rotate90(), FlipX(prob=0.5), FlipY(prob=0.5),
+                         ContrastAdjust(adj=0.1, include_segmentation=True),
+                         RandomDeformation_2D(input_shape[1:], grid_size=(64, 64), sigma=0.01, device=args.device,
+                                              include_segmentation=True),
+                         AddNoise(sigma_max=0.05, include_segmentation=True)])
+train_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/train'),
+                                         os.path.join(args.data_dir, 'EM/EPFL/train_labels'),
+                                         input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
+test_src = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/EPFL/test'),
+                                        os.path.join(args.data_dir, 'EM/EPFL/test_labels'),
+                                        input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
+train_tar_ul = UnlabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/data_larger'), input_shape=input_shape,
+                                      len_epoch=args.len_epoch, type='pngseq')
+train_tar_l = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/train'),
+                                           os.path.join(args.data_dir, 'EM/VNC/train_labels'),
+                                           input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
+test_tar_l = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/test'),
+                                          os.path.join(args.data_dir, 'EM/VNC/test_labels'),
+                                          input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
 train_loader_src = DataLoader(train_src, batch_size=args.train_batch_size)
+test_loader_src = DataLoader(test_src, batch_size=args.train_batch_size)
 train_loader_tar_ul = DataLoader(train_tar_ul, batch_size=args.train_batch_size)
 train_loader_tar_l = DataLoader(train_tar_l, batch_size=args.train_batch_size)
-test_loader_src = DataLoader(test_src, batch_size=args.train_batch_size)
-test_loader_tar = DataLoader(test_tar, batch_size=args.test_batch_size)
+test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
 
 """
     Build the network
@@ -124,7 +129,7 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma
 """
 print('[%s] Starting training' % (datetime.datetime.now()))
 net.train_net_semi_supervised(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src,
-                              test_loader_tar, loss_seg_fn, loss_rec_fn, optimizer, args.epochs, scheduler=scheduler,
+                              test_loader_tar_l, loss_seg_fn, loss_rec_fn, optimizer, args.epochs, scheduler=scheduler,
                               augmenter_src=augmenter_src, augmenter_tar=augmenter_tar, print_stats=args.print_stats,
                               log_dir=args.log_dir)
 
@@ -132,12 +137,12 @@ net.train_net_semi_supervised(train_loader_src, train_loader_tar_ul, train_loade
     Validate the trained network
 """
 net = net.get_unet()
-validate(net, test_tar.data, test_tar.labels, args.input_size, batch_size=args.test_batch_size,
-         write_dir=os.path.join(args.write_dir, 'segmentation_final'),
+validate(net, test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
+         write_dir=os.path.join(args.log_dir, 'segmentation_final'),
          val_file=os.path.join(args.log_dir, 'validation_final.npy'))
 net = torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch')).get_unet()
-validate(net, test_tar.data, test_tar.labels, args.input_size, batch_size=args.test_batch_size,
-         write_dir=os.path.join(args.write_dir, 'segmentation_best'),
+validate(net, test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
+         write_dir=os.path.join(args.log_dir, 'segmentation_best'),
          val_file=os.path.join(args.log_dir, 'validation_best.npy'))
 
 print('[%s] Finished!' % (datetime.datetime.now()))
