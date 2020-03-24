@@ -12,4 +12,4 @@ This code implements the method that is described in the paper:
   - [VNC mitochondria dataset (target)](https://github.com/unidesigner/groundtruth-drosophila-vnc)
 
 ## Usage
-We provide a notebook for [Y-Net](ynet.ipynb) [1] that illustrates the usage of our methods. Note that the data path might be different, depending on where you downloaded the source and target data. 
+We provide test scripts for Y-Net [1] that illustrates the usage of our method (both unsupervised and semi-supervised domain adaptation). Note that the data paths might be different, depending on where you downloaded the source and target data. The data volumes should be converted to PNG sequences. The [neuralnets](https://github.com/jorisroels/neuralnets) library contains various conversion scripts for volume data. 
