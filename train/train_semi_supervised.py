@@ -105,7 +105,7 @@ test_tar_l = StronglyLabeledVolumeDataset(os.path.join(args.data_dir, 'EM/VNC/te
                                           os.path.join(args.data_dir, 'EM/VNC/test_labels'),
                                           input_shape=input_shape, len_epoch=args.len_epoch, type='pngseq')
 train_loader_src = DataLoader(train_src, batch_size=args.train_batch_size)
-test_loader_src = DataLoader(test_src, batch_size=args.train_batch_size)
+test_loader_src = DataLoader(test_src, batch_size=args.test_batch_size)
 train_loader_tar_ul = DataLoader(train_tar_ul, batch_size=args.train_batch_size)
 train_loader_tar_l = DataLoader(train_tar_l, batch_size=args.train_batch_size)
 test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
