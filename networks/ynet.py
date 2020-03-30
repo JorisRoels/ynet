@@ -7,19 +7,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 from neuralnets.networks.unet import UNetEncoder2D, UNetDecoder2D, UNet2D, UNetEncoder3D, UNetDecoder3D, UNet3D
 from neuralnets.util.metrics import jaccard, accuracy_metrics
-from neuralnets.util.tools import module_to_device, tensor_to_device, log_scalars, log_images_2d, log_images_3d, augment_samples
+from neuralnets.util.tools import module_to_device, tensor_to_device, log_scalars, log_images_2d, log_images_3d, augment_samples, get_labels
 from torch.utils.tensorboard import SummaryWriter
 
 
 # 2D Y-Net model for domain adaptive segmentation
 class YNet2D(nn.Module):
 
-    def __init__(self, in_channels=1, out_channels=2, feature_maps=64, levels=4, norm='instance', lambda_rec=1e-3,
+    def __init__(self, in_channels=1, coi=(0, 1), feature_maps=64, levels=4, norm='instance', lambda_rec=1e-3,
                  dropout_enc=0.0, dropout_dec=0.0, activation='relu'):
         super(YNet2D, self).__init__()
 
         self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.coi = coi
+        self.out_channels = len(coi)
         self.feature_maps = feature_maps
         self.levels = levels
         self.dropout_enc = dropout_enc
@@ -35,7 +36,7 @@ class YNet2D(nn.Module):
                                      dropout=dropout_enc, activation=activation)
 
         # segmentation decoder
-        self.segmentation_decoder = UNetDecoder2D(out_channels=out_channels, feature_maps=feature_maps, levels=levels,
+        self.segmentation_decoder = UNetDecoder2D(out_channels=self.out_channels, feature_maps=feature_maps, levels=levels,
                                                   norm=norm, dropout=dropout_dec, activation=activation)
 
         # reconstruction decoder
@@ -64,9 +65,8 @@ class YNet2D(nn.Module):
         Get the segmentation network branch
         :return: a U-Net module
         """
-        net = UNet2D(in_channels=self.encoder.in_channels, out_channels=self.decoder.out_channels,
-                     feature_maps=self.encoder.feature_maps, levels=self.encoder.levels,
-                     skip_connections=self.segmentation_decoder.skip_connections,
+        net = UNet2D(in_channels=self.encoder.in_channels, coi=self.coi, feature_maps=self.encoder.feature_maps,
+                     levels=self.encoder.levels, skip_connections=self.segmentation_decoder.skip_connections,
                      norm=self.encoder.norm, activation=self.encoder.activation,
                      dropout_enc=self.encoder.dropout, dropout_dec=self.segmentation_decoder.dropout)
 
@@ -119,7 +119,7 @@ class YNet2D(nn.Module):
             # augment if necessary
             x_src, y_src = augment_samples(data_src, augmenter=augmenter_src)
             x_tar, y_tar = augment_samples(data_tar, augmenter=augmenter_tar)
-            y_src = y_src.long()
+            y_src = get_labels(y_src, coi=self.coi, dtype=int)
 
             # zero the gradient buffers
             self.zero_grad()
@@ -217,9 +217,9 @@ class YNet2D(nn.Module):
             # augment if necessary
             x_src, y_src = augment_samples(data_src, augmenter=augmenter_src)
             x_tar_l, y_tar_l = augment_samples(data_tar_l, augmenter=augmenter_tar)
+            y_src = get_labels(y_src, coi=self.coi, dtype=int)
+            y_tar_l = get_labels(y_tar_l, coi=self.coi, dtype=int)
             x_tar_ul = x_tar_ul.float()
-            y_src = y_src.long()
-            y_tar_l = y_tar_l.long()
 
             # zero the gradient buffers
             self.zero_grad()
@@ -312,10 +312,10 @@ class YNet2D(nn.Module):
             # get inputs and transfer to suitable device
             x_src, y_src = tensor_to_device(data[0], device)
             x_tar, y_tar = tensor_to_device(data[1], device)
+            y_src = get_labels(y_src, coi=self.coi, dtype=int)
+            y_tar = get_labels(y_tar, coi=self.coi, dtype=int)
             x_src = x_src.float()
             x_tar = x_tar.float()
-            y_src = y_src.long()
-            y_tar = y_tar.long()
 
             # zero the gradient buffers
             self.zero_grad()
@@ -510,12 +510,13 @@ class YNet2D(nn.Module):
 # 3D Y-Net model for domain adaptive segmentation
 class YNet3D(nn.Module):
 
-    def __init__(self, in_channels=1, out_channels=2, feature_maps=64, levels=4, norm='instance', lambda_rec=1e-3,
+    def __init__(self, in_channels=1, coi=(0, 1), feature_maps=64, levels=4, norm='instance', lambda_rec=1e-3,
                  dropout_enc=0.0, dropout_dec=0.0, activation='relu'):
         super(YNet3D, self).__init__()
 
         self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.coi = coi
+        self.out_channels = len(coi)
         self.feature_maps = feature_maps
         self.levels = levels
         self.dropout_enc = dropout_enc
@@ -531,7 +532,7 @@ class YNet3D(nn.Module):
                                      dropout=dropout_enc, activation=activation)
 
         # segmentation decoder
-        self.segmentation_decoder = UNetDecoder3D(out_channels=out_channels, feature_maps=feature_maps, levels=levels,
+        self.segmentation_decoder = UNetDecoder3D(out_channels=self.out_channels, feature_maps=feature_maps, levels=levels,
                                                   norm=norm, dropout=dropout_dec, activation=activation)
 
         # reconstruction decoder
@@ -560,9 +561,8 @@ class YNet3D(nn.Module):
         Get the segmentation network branch
         :return: a U-Net module
         """
-        net = UNet3D(in_channels=self.encoder.in_channels, out_channels=self.decoder.out_channels,
-                     feature_maps=self.encoder.feature_maps, levels=self.encoder.levels,
-                     skip_connections=self.segmentation_decoder.skip_connections,
+        net = UNet3D(in_channels=self.encoder.in_channels, coi=self.coi, feature_maps=self.encoder.feature_maps,
+                     levels=self.encoder.levels,skip_connections=self.segmentation_decoder.skip_connections,
                      norm=self.encoder.norm, activation=self.encoder.activation,
                      dropout_enc=self.encoder.dropout, dropout_dec=self.segmentation_decoder.dropout)
 
@@ -615,7 +615,7 @@ class YNet3D(nn.Module):
             # augment if necessary
             x_src, y_src = augment_samples(data_src, augmenter=augmenter_src)
             x_tar, y_tar = augment_samples(data_tar, augmenter=augmenter_tar)
-            y_src = y_src.long()
+            y_src = get_labels(y_src, coi=self.coi, dtype=int)
 
             # zero the gradient buffers
             self.zero_grad()
@@ -713,9 +713,9 @@ class YNet3D(nn.Module):
             # augment if necessary
             x_src, y_src = augment_samples(data_src, augmenter=augmenter_src)
             x_tar_l, y_tar_l = augment_samples(data_tar_l, augmenter=augmenter_tar)
+            y_src = get_labels(y_src, coi=self.coi, dtype=int)
+            y_tar_l = get_labels(y_tar_l, coi=self.coi, dtype=int)
             x_tar_ul = x_tar_ul.float()
-            y_src = y_src.long()
-            y_tar_l = y_tar_l.long()
 
             # zero the gradient buffers
             self.zero_grad()
@@ -808,10 +808,10 @@ class YNet3D(nn.Module):
             # get inputs and transfer to suitable device
             x_src, y_src = tensor_to_device(data[0], device)
             x_tar, y_tar = tensor_to_device(data[1], device)
+            y_src = get_labels(y_src, coi=self.coi, dtype=int)
+            y_tar = get_labels(y_tar, coi=self.coi, dtype=int)
             x_src = x_src.float()
             x_tar = x_tar.float()
-            y_src = y_src.long()
-            y_tar = y_tar.long()
 
             # zero the gradient buffers
             self.zero_grad()

@@ -12,7 +12,7 @@ import os
 import torch.optim as optim
 from neuralnets.data.datasets import StronglyLabeledVolumeDataset, UnlabeledVolumeDataset
 from neuralnets.util.augmentation import *
-from neuralnets.util.losses import CrossEntropyLoss, MSELoss
+from neuralnets.util.losses import get_loss_function
 from neuralnets.util.tools import set_seed
 from neuralnets.util.validation import validate
 from torch.utils.data import DataLoader
@@ -43,6 +43,8 @@ parser.add_argument("--levels", help="Number of levels in the segmentation U-Net
 parser.add_argument("--dropout", help="Dropout", type=float, default=0.0)
 parser.add_argument("--norm", help="Normalization in the network (batch or instance)", type=str, default="instance")
 parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
+parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
+                    type=str, default="0,1")
 
 # regularization parameters
 parser.add_argument('--lambda_rec', help='Regularization parameters for Y-Net reconstruction', type=float, default=1e-2)
@@ -60,8 +62,9 @@ parser.add_argument("--test_batch_size", help="Batch size in the testing stage",
 
 args = parser.parse_args()
 args.input_size = [int(item) for item in args.input_size.split(',')]
-loss_seg_fn = CrossEntropyLoss()
-loss_rec_fn = MSELoss()
+args.classes_of_interest = [int(c) for c in args.classes_of_interest.split(',')]
+loss_seg_fn = get_loss_function('ce')
+loss_rec_fn = get_loss_function('mse')
 
 """
 Fix seed (for reproducibility)
@@ -115,7 +118,7 @@ test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
 """
 print('[%s] Building the network' % (datetime.datetime.now()))
 net = YNet2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, lambda_rec=args.lambda_rec,
-             dropout_enc=args.dropout, activation=args.activation)
+             dropout_enc=args.dropout, activation=args.activation, coi=args.classes_of_interest)
 
 """
     Setup optimization for training
