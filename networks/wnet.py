@@ -65,7 +65,7 @@ class WNet2D(nn.Module):
         self.conv_channels = conv_channels
         fc_channels = tuple(np.asarray([*fc_channels, 2]).astype('int'))
         self.fc_channels = fc_channels
-        self.p = 1
+        self.p = 0.5
 
         # reconstruction encoder
         self.rec_encoder = UNetEncoder2D(in_channels=in_channels, feature_maps=feature_maps, levels=levels, norm=norm,
