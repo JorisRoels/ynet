@@ -68,6 +68,20 @@ def _validate_shape(input_shape, data_shape, orientation=0, in_channels=1, level
     return tuple(input_shape)
 
 
+def _select_subset(data, available=-1):
+    # data dimensions
+    z, y, x = data.shape
+    n = data.size
+
+    # compute fraction of data to select
+    f = available / n
+    f3 = np.power(f, 1/3)
+    z_, y_, x_ = int(z*f3), int(y*f3), int(x*f3)
+
+    # select the data and return
+    return data[:z_, :y_, :x_]
+
+
 class VolumeDataset(data.Dataset):
     """
     Dataset for volumes
@@ -85,11 +99,12 @@ class VolumeDataset(data.Dataset):
     :param optional dtype: type of the data (typically uint8)
     :param optional norm_type: type of the normalization (unit, z or minmax)
     :param optional train: train or test data
+    :param optional available: amount of available data
     """
 
     def __init__(self, data_path, input_shape, split_orientation='z', split_location=0.50, scaling=None, len_epoch=1000,
                  type='tif3d', in_channels=1, orientations=(0,), batch_size=1, dtype='uint8', norm_type='unit',
-                 train=True):
+                 train=True, available=-1):
         self.data_path = data_path
         self.input_shape = input_shape
         self.split_orientation = split_orientation
@@ -102,6 +117,7 @@ class VolumeDataset(data.Dataset):
         self.batch_size = batch_size
         self.norm_type = norm_type
         self.train = train
+        self.available = available
 
         # load the data
         d = 0 if split_orientation == 'z' else 1 if split_orientation == 'y' else 2
@@ -124,6 +140,10 @@ class VolumeDataset(data.Dataset):
             self.data = \
                 F.interpolate(torch.Tensor(self.data[np.newaxis, np.newaxis, ...]), size=tuple(target_size),
                               mode='area')[0, 0, ...].numpy()
+
+        # select a crop of the data if necessary
+        if available >= 0:
+            self.data = _select_subset(self.data, available=available)
 
     def __getitem__(self, i):
         pass
@@ -161,15 +181,16 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
     :param optional label_dtype: type of the labels (typically uint8)
     :param optional norm_type: type of the normalization (unit, z or minmax)
     :param optional train: train or test data
+    :param optional available: amount of available data and labels
     """
 
     def __init__(self, data_path, label_path, input_shape=None, split_orientation='z', split_location=0.50,
                  scaling=None, len_epoch=1000, type='tif3d', coi=(0, 1), in_channels=1, orientations=(0,), batch_size=1,
-                 data_dtype='uint8', label_dtype='uint8', norm_type='unit', train=True):
+                 data_dtype='uint8', label_dtype='uint8', norm_type='unit', train=True, available=-1):
         super().__init__(data_path, input_shape, split_orientation=split_orientation, split_location=split_location,
                          scaling=scaling, len_epoch=len_epoch, type=type, in_channels=in_channels,
                          orientations=orientations, batch_size=batch_size, dtype=data_dtype, norm_type=norm_type,
-                         train=train)
+                         train=train, available=available)
 
         self.label_path = label_path
         self.coi = coi
@@ -195,7 +216,9 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
             self.labels = F.interpolate(torch.Tensor(self.labels[np.newaxis, np.newaxis, ...]), size=tuple(target_size),
                                         mode='area')[0, 0, ...].numpy()
 
-        self.mu, self.std = self._get_stats()
+        # select a crop of the data if necessary
+        if available >= 0:
+            self.labels = _select_subset(self.labels, available=available)
 
     def __getitem__(self, i):
 
@@ -243,17 +266,16 @@ class UnlabeledVolumeDataset(VolumeDataset):
     :param optional dtype: type of the data (typically uint8)
     :param optional norm_type: type of the normalization (unit, z or minmax)
     :param optional train: train or test data
+    :param optional available: amount of available data and labels
     """
 
     def __init__(self, data_path, input_shape=None, split_orientation='z', split_location=0.50, scaling=None,
                  len_epoch=1000, type='tif3d', in_channels=1, orientations=(0,), batch_size=1, dtype='uint8',
-                 norm_type='unit', train=True):
+                 norm_type='unit', train=True, available=-1):
         super().__init__(data_path, input_shape, split_orientation=split_orientation, split_location=split_location,
                          scaling=scaling, len_epoch=len_epoch, type=type, in_channels=in_channels,
                          orientations=orientations, batch_size=batch_size, dtype=dtype, norm_type=norm_type,
-                         train=train)
-
-        self.mu, self.std = self._get_stats()
+                         train=train, available=available)
 
     def __getitem__(self, i):
 

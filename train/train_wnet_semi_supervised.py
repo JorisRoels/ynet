@@ -17,7 +17,7 @@ from neuralnets.util.validation import validate
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
 
-from networks.wnet import WNet2D
+from networks.wnet import WNet2D, JOINT, RECONSTRUCTION, SEGMENTATION
 from data.datasets import StronglyLabeledVolumeDataset, UnlabeledVolumeDataset
 
 """
@@ -45,6 +45,8 @@ parser.add_argument("--norm", help="Normalization in the network (batch or insta
 parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
+parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=-1)
+parser.add_argument("--end2end", help="Train the network end to end", action="store_true")
 
 # regularization parameters
 parser.add_argument('--lambda_rec', help='Regularization parameter for W-Net reconstruction', type=float, default=1e-1)
@@ -55,7 +57,7 @@ parser.add_argument("--lr", help="Learning rate of the optimization", type=float
 parser.add_argument("--step_size", help="Number of epochs after which the learning rate should decay",
                     type=int, default=10)
 parser.add_argument("--gamma", help="Learning rate decay factor", type=float, default=0.9)
-parser.add_argument("--epochs", help="Total number of epochs to train", type=int, default=200)
+parser.add_argument("--epochs", help="Total number of epochs to train", type=int, default=250)
 parser.add_argument("--len_epoch", help="Number of iteration in each epoch", type=int, default=100)
 parser.add_argument("--test_freq", help="Number of epochs between each test stage", type=int, default=1)
 parser.add_argument("--train_batch_size", help="Batch size in the training stage", type=int, default=2)
@@ -106,8 +108,8 @@ test_tar_ul = UnlabeledVolumeDataset(df['target_unlabeled']['raw'],
 train_tar_l = StronglyLabeledVolumeDataset(df['target_labeled']['raw'], df['target_labeled']['labels'],
                                            split_orientation=df['target_labeled']['split-orientation'],
                                            split_location=df['target_labeled']['split-location'],
-                                           input_shape=input_shape,
-                                           len_epoch=args.len_epoch, type=df['types'], train=True)
+                                           input_shape=input_shape, len_epoch=args.len_epoch, type=df['types'],
+                                           train=True, available=args.available_target_labels)
 test_tar_l = StronglyLabeledVolumeDataset(df['target_labeled']['raw'], df['target_labeled']['labels'],
                                           split_orientation=df['target_labeled']['split-orientation'],
                                           split_location=df['target_labeled']['split-location'],
@@ -117,7 +119,10 @@ train_loader_src = DataLoader(train_src, batch_size=args.train_batch_size)
 test_loader_src = DataLoader(test_src, batch_size=args.test_batch_size)
 train_loader_tar_ul = DataLoader(train_tar_ul, batch_size=args.train_batch_size)
 test_loader_tar_ul = DataLoader(test_tar_ul, batch_size=args.train_batch_size)
-train_loader_tar_l = DataLoader(train_tar_l, batch_size=args.train_batch_size)
+if args.available_target_labels == 0:
+    train_loader_tar_l = None
+else:
+    train_loader_tar_l = DataLoader(train_tar_l, batch_size=args.train_batch_size)
 test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
 
 """
@@ -138,10 +143,23 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma
 """
     Train the network
 """
-print('[%s] Starting training' % (datetime.datetime.now()))
-net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
-              test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-              print_stats=args.print_stats, log_dir=args.log_dir)
+if args.end2end:
+    print('[%s] Starting end-to-end training' % (datetime.datetime.now()))
+    net.train_mode = JOINT
+    net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
+                  test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
+                  print_stats=args.print_stats, log_dir=args.log_dir)
+else:
+    print('[%s] Starting reconstruction training' % (datetime.datetime.now()))
+    net.train_mode = RECONSTRUCTION
+    net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
+                  test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
+                  print_stats=args.print_stats, log_dir=args.log_dir)
+    print('[%s] Starting segmentation training' % (datetime.datetime.now()))
+    net.train_mode = SEGMENTATION
+    net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
+                  test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
+                  print_stats=args.print_stats, log_dir=args.log_dir)
 
 """
     Validate the trained network

@@ -147,13 +147,8 @@ class WNet2D(nn.Module):
                      norm=self.seg_encoder.norm, activation=self.seg_encoder.activation,
                      dropout_enc=self.seg_encoder.dropout, dropout_dec=self.seg_decoder.dropout)
 
-        params = list(net.encoder.parameters())
-        for i, param in enumerate(self.seg_encoder.parameters()):
-            params[i] = param
-
-        params = list(net.decoder.parameters())
-        for i, param in enumerate(self.seg_decoder.parameters()):
-            params[i] = param
+        net.encoder.load_state_dict(self.seg_encoder.state_dict())
+        net.decoder.load_state_dict(self.seg_decoder.state_dict())
 
         return net
 
@@ -391,24 +386,23 @@ class WNet2D(nn.Module):
         cnt = 0
 
         # zip dataloaders
-        if loader_tar_l is None:
-            dl = zip(loader_src, loader_tar_ul)
-        else:
-            dl = zip(loader_src, loader_tar_ul, loader_tar_l)
+        dl = zip(loader_src, loader_tar_ul, loader_tar_l)
 
         # start epoch
+        y_preds = []
+        ys = []
+        ys_ = []
         for i, data in enumerate(dl):
 
             # transfer to suitable device
             x_src, y_src = tensor_to_device(data[0], device)
             x_tar_ul = tensor_to_device(data[1], device)
+            x_tar_l, y_tar_l = tensor_to_device(data[2], device)
             x_src = x_src.float()
-            y_src = y_src.long()
             x_tar_ul = x_tar_ul.float()
-            if loader_tar_l is not None:
-                x_tar_l, y_tar_l = tensor_to_device(data[2], device)
-                x_tar_l = x_tar_l.float()
-                y_tar_l = y_tar_l.long()
+            x_tar_l = x_tar_l.float()
+            y_src = y_src.long()
+            y_tar_l = y_tar_l.long()
 
             # zero the gradient buffers
             self.zero_grad()
@@ -449,10 +443,9 @@ class WNet2D(nn.Module):
                 loss_seg_src = self.seg_loss(y_src_pred, y_src[:, 0, ...])
                 loss_dc_y = self.dc_loss(torch.cat((y_src_pred_dom, y_tar_ul_pred_dom), dim=0), dom_labels_y)
                 total_loss = loss_seg_src + self.lambda_dc * loss_dc_y
-                if loader_tar_l is not None:
-                    y_tar_l_pred, _ = self.forward_seg(x_tar_l)
-                    loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
-                    total_loss = total_loss + loss_seg_tar
+                y_tar_l_pred, _ = self.forward_seg(x_tar_l)
+                loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
+                total_loss = total_loss + loss_seg_tar
             else:
                 x_src_rec, x_src_rec_dom = self.forward_rec(x_src)
                 if np.random.rand() < self.p:
@@ -473,10 +466,9 @@ class WNet2D(nn.Module):
                 loss_dc_y = self.dc_loss(torch.cat((y_src_pred_dom, y_tar_ul_pred_dom), dim=0), dom_labels_y)
                 total_loss = loss_seg_src + self.lambda_rec * (loss_rec_src + loss_rec_tar) + \
                              self.lambda_dc * (loss_dc_x + loss_dc_y)
-                if loader_tar_l is not None:
-                    _, y_tar_l_pred, _, y_tar_l_pred_dom = self(x_tar_l)
-                    loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
-                    total_loss = total_loss + loss_seg_tar
+                _, y_tar_l_pred, _, y_tar_l_pred_dom = self(x_tar_l)
+                loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
+                total_loss = total_loss + loss_seg_tar
 
             loss_seg_src_cum += loss_seg_src.data.cpu().numpy()
             loss_seg_tar_cum += loss_seg_tar.data.cpu().numpy()
@@ -486,6 +478,16 @@ class WNet2D(nn.Module):
             loss_dc_y_cum += loss_dc_y.data.cpu().numpy()
             total_loss_cum += total_loss.data.cpu().numpy()
             cnt += 1
+
+            for b in range(y_tar_l_pred.size(0)):
+                y_preds.append(F.softmax(y_tar_l_pred, dim=1)[b, ...].view(y_tar_l_pred.size(1), -1).data.cpu().numpy())
+                ys.append(y_tar_l[b, 0, ...].flatten().cpu().numpy())
+
+        # prep for metric computation
+        y_preds = np.concatenate(y_preds, axis=1)
+        ys = np.concatenate(ys)
+        js = [jaccard((ys == i).astype(int), y_preds[i, :]) for i in range(1, len(self.coi))]
+        ams = [accuracy_metrics((ys == i).astype(int), y_preds[i, :]) for i in range(1, len(self.coi))]
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
@@ -515,7 +517,9 @@ class WNet2D(nn.Module):
                              loss_dc_y_avg], ['test/' + s for s in
                                               ['loss-seg-src', 'loss-seg-tar', 'loss-rec-src', 'loss-rec-tar',
                                                'loss-dc-x', 'loss-dc-y']], writer, epoch=epoch)
-            log_scalars([total_loss_avg], ['test/' + s for s in ['total-loss']], writer, epoch=epoch)
+            log_scalars([total_loss_avg, js[0], *(ams[0])], ['test/' + s for s in
+                                                             ['total-loss', 'jaccard', 'accuracy', 'balanced-accuracy',
+                                                              'precision', 'recall', 'f-score']], writer, epoch=epoch)
 
             # log images if necessary
             if write_images:
