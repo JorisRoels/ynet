@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.data as data
 
-from neuralnets.util.io import read_volume
+from neuralnets.util.io import read_volume, print_frm
 from neuralnets.util.tools import sample_unlabeled_input, sample_labeled_input, normalize
 
 
@@ -75,8 +75,8 @@ def _select_subset(data, available=-1):
 
     # compute fraction of data to select
     f = available / n
-    f3 = np.power(f, 1/3)
-    z_, y_, x_ = int(z*f3), int(y*f3), int(x*f3)
+    f3 = np.power(f, 1 / 3)
+    z_, y_, x_ = int(z * f3), int(y * f3), int(x * f3)
 
     # select the data and return
     return data[:z_, :y_, :x_]
@@ -142,8 +142,12 @@ class VolumeDataset(data.Dataset):
                               mode='area')[0, 0, ...].numpy()
 
         # select a crop of the data if necessary
+        print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
+        self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
         if available >= 0:
             self.data = _select_subset(self.data, available=available)
+        print_frm('Used for training: %d x %d x %d (total: %d)' % (
+        self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
 
     def __getitem__(self, i):
         pass

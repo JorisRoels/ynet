@@ -46,7 +46,7 @@ parser.add_argument("--activation", help="Non-linear activations in the network"
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
 parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=-1)
-parser.add_argument("--end2end", help="Train the network end to end", action="store_true")
+parser.add_argument("--end2end", help="Train the network end to end", action="store_false")
 
 # regularization parameters
 parser.add_argument('--lambda_rec', help='Regularization parameter for W-Net reconstruction', type=float, default=1e-1)
