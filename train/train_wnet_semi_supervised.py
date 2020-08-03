@@ -156,6 +156,8 @@ else:
                   test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
                   print_stats=args.print_stats, log_dir=args.log_dir)
     print('[%s] Starting segmentation training' % (datetime.datetime.now()))
+    optimizer = optim.Adam(net.parameters(), lr=args.lr)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
     net.train_mode = SEGMENTATION
     net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
                   test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
