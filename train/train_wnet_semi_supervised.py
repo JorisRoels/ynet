@@ -46,7 +46,7 @@ parser.add_argument("--activation", help="Non-linear activations in the network"
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
 parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=-1)
-parser.add_argument("--end2end", help="Train the network end to end", action="store_false")
+parser.add_argument("--end2end", help="Train the network end to end", action="store_true")
 
 # regularization parameters
 parser.add_argument('--lambda_rec', help='Regularization parameter for W-Net reconstruction', type=float, default=1e-1)
@@ -148,20 +148,20 @@ if args.end2end:
     net.train_mode = JOINT
     net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
                   test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-                  print_stats=args.print_stats, log_dir=args.log_dir)
+                  print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
 else:
     print('[%s] Starting reconstruction training' % (datetime.datetime.now()))
     net.train_mode = RECONSTRUCTION
     net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
                   test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-                  print_stats=args.print_stats, log_dir=args.log_dir)
+                  print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
     print('[%s] Starting segmentation training' % (datetime.datetime.now()))
     optimizer = optim.Adam(net.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
     net.train_mode = SEGMENTATION
     net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
                   test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-                  print_stats=args.print_stats, log_dir=args.log_dir)
+                  print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
 
 """
     Validate the trained network
