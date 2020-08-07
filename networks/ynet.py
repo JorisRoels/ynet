@@ -10,6 +10,7 @@ from neuralnets.util.metrics import jaccard, accuracy_metrics
 from neuralnets.util.losses import DiceLoss
 from neuralnets.util.tools import module_to_device, tensor_to_device, log_scalars, log_images_2d, log_images_3d, \
     augment_samples, get_labels
+from neuralnets.util.io import print_frm
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -129,6 +130,7 @@ class YNet2D(nn.Module):
             dl = zip(loader_src, loader_tar_ul, loader_tar_l)
 
         # start epoch
+        time_start = datetime.datetime.now()
         for i, data in enumerate(dl):
 
             # transfer to suitable device
@@ -184,6 +186,14 @@ class YNet2D(nn.Module):
                     % (datetime.datetime.now(), epoch, i, len(loader_src.dataset) / loader_src.batch_size,
                        loss_seg_src_cum / cnt, loss_seg_tar_cum / cnt, loss_rec_src_cum / cnt, loss_rec_tar_cum / cnt,
                        total_loss_cum / cnt))
+
+        # keep track of time
+        runtime = datetime.datetime.now() - time_start
+        seconds = runtime.total_seconds()
+        hours = seconds // 3600
+        minutes = (seconds - hours * 3600) // 60
+        seconds = seconds - hours * 3600 - minutes * 60
+        print_frm('Epoch %5d - Runtime for trainin: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
@@ -250,6 +260,7 @@ class YNet2D(nn.Module):
             dl = zip(loader_src, loader_tar_ul, loader_tar_l)
 
         # start epoch
+        time_start = datetime.datetime.now()
         for i, data in enumerate(dl):
 
             # transfer to suitable device
@@ -281,6 +292,14 @@ class YNet2D(nn.Module):
             loss_rec_tar_cum += loss_rec_tar.data.cpu().numpy()
             total_loss_cum += total_loss.data.cpu().numpy()
             cnt += 1
+
+        # keep track of time
+        runtime = datetime.datetime.now() - time_start
+        seconds = runtime.total_seconds()
+        hours = seconds // 3600
+        minutes = (seconds - hours * 3600) // 60
+        seconds = seconds - hours * 3600 - minutes * 60
+        print_frm('Epoch %5d - Runtime for testing: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt

@@ -11,6 +11,7 @@ from neuralnets.util.metrics import jaccard, accuracy_metrics
 from neuralnets.util.losses import DiceLoss
 from neuralnets.util.tools import module_to_device, tensor_to_device, log_scalars, log_images_2d, log_images_3d, \
     augment_samples, get_labels
+from neuralnets.util.io import print_frm
 from torch.utils.tensorboard import SummaryWriter
 from torch.autograd import Function
 
@@ -189,6 +190,7 @@ class WNet2D(nn.Module):
             dl = zip(loader_src, loader_tar_ul, loader_tar_l)
 
         # start epoch
+        time_start = datetime.datetime.now()
         for i, data in enumerate(dl):
 
             # transfer to suitable device
@@ -299,6 +301,14 @@ class WNet2D(nn.Module):
                        loss_seg_src_cum / cnt, loss_seg_tar_cum / cnt, loss_rec_src_cum / cnt, loss_rec_tar_cum / cnt,
                        loss_dc_x_cum / cnt, loss_dc_y_cum / cnt, total_loss_cum / cnt))
 
+        # keep track of time
+        runtime = datetime.datetime.now() - time_start
+        seconds = runtime.total_seconds()
+        hours = seconds // 3600
+        minutes = (seconds - hours * 3600) // 60
+        seconds = seconds - hours * 3600 - minutes * 60
+        print_frm('Epoch %5d - Runtime for training: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
+
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
         loss_seg_tar_avg = loss_seg_tar_cum / cnt
@@ -391,6 +401,7 @@ class WNet2D(nn.Module):
         # start epoch
         y_preds = []
         ys = []
+        time_start = datetime.datetime.now()
         for i, data in enumerate(dl):
 
             # transfer to suitable device
@@ -480,6 +491,14 @@ class WNet2D(nn.Module):
                     y_preds.append(
                         F.softmax(y_tar_l_pred, dim=1)[b, ...].view(y_tar_l_pred.size(1), -1).data.cpu().numpy())
                     ys.append(y_tar_l[b, 0, ...].flatten().cpu().numpy())
+
+        # keep track of time
+        runtime = datetime.datetime.now() - time_start
+        seconds = runtime.total_seconds()
+        hours = seconds // 3600
+        minutes = (seconds - hours * 3600) // 60
+        seconds = seconds - hours * 3600 - minutes * 60
+        print_frm('Epoch %5d - Runtime for testing: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # prep for metric computation
         if self.train_mode == SEGMENTATION or self.train_mode == JOINT:

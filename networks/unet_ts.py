@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from neuralnets.networks.unet import UNetEncoder2D, UNetDecoder2D, UNet2D
 from neuralnets.util.tools import *
 from neuralnets.util.losses import DiceLoss
+from neuralnets.util.io import print_frm
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -257,6 +258,7 @@ class UNetTS2D(nn.Module):
             dl = zip(loader_src, loader_tar_ul, loader_tar_l)
 
         # start epoch
+        time_start = datetime.datetime.now()
         for i, data in enumerate(dl):
 
             # transfer to suitable device
@@ -313,6 +315,14 @@ class UNetTS2D(nn.Module):
                     '[%s] Epoch %5d - Iteration %5d/%5d - Loss seg src: %.6f - Loss seg tar: %.6f - Loss weights: %.6f - Loss feature: %.6f - Loss: %.6f'
                     % (datetime.datetime.now(), epoch, i, len(loader_src.dataset) / loader_src.batch_size, loss_seg_src,
                        loss_seg_tar, self.lambda_w * loss_weights, self.lambda_o * loss_feature, total_loss))
+
+        # keep track of time
+        runtime = datetime.datetime.now() - time_start
+        seconds = runtime.total_seconds()
+        hours = seconds // 3600
+        minutes = (seconds - hours * 3600) // 60
+        seconds = seconds - hours * 3600 - minutes * 60
+        print_frm('Epoch %5d - Runtime for training: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
@@ -379,6 +389,7 @@ class UNetTS2D(nn.Module):
             dl = zip(loader_src, loader_tar_ul, loader_tar_l)
 
         # start epoch
+        time_start = datetime.datetime.now()
         for i, data in enumerate(dl):
 
             # transfer to suitable device
@@ -412,6 +423,14 @@ class UNetTS2D(nn.Module):
             loss_feature_cum += loss_feature.data.cpu().numpy()
             total_loss_cum += total_loss.data.cpu().numpy()
             cnt += 1
+
+        # keep track of time
+        runtime = datetime.datetime.now() - time_start
+        seconds = runtime.total_seconds()
+        hours = seconds // 3600
+        minutes = (seconds - hours * 3600) // 60
+        seconds = seconds - hours * 3600 - minutes * 60
+        print_frm('Epoch %5d - Runtime for testing: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
