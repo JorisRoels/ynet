@@ -1,5 +1,5 @@
 """
-    This is a script that trains the W-Net in a semi-supervised fashion
+    This is a script that trains the Y-Net in a semi-supervised fashion
 """
 
 """
@@ -14,10 +14,11 @@ import torch.optim as optim
 from neuralnets.util.augmentation import *
 from neuralnets.util.tools import set_seed
 from neuralnets.util.validation import validate
+from neuralnets.networks.unet import UNet2D
+from neuralnets.util.losses import DiceLoss
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
 
-from networks.wnet import WNet2D, JOINT, RECONSTRUCTION, SEGMENTATION
 from data.datasets import StronglyLabeledVolumeDataset, UnlabeledVolumeDataset
 
 """
@@ -29,9 +30,9 @@ parser = argparse.ArgumentParser()
 # logging parameters
 parser.add_argument("--seed", help="Seed for randomization", type=int, default=0)
 parser.add_argument("--device", help="GPU device for computations", type=int, default=0)
-parser.add_argument("--log_dir", help="Logging directory", type=str, default="wnet")
+parser.add_argument("--log_dir", help="Logging directory", type=str, default="unet")
 parser.add_argument("--print_stats", help="Number of iterations between each time to log training losses",
-                    type=int, default=10)
+                    type=int, default=50)
 
 # network parameters
 parser.add_argument("--data_file", help="Path to the JSON data file", type=str, default="epfl2vnc.json")
@@ -46,11 +47,6 @@ parser.add_argument("--activation", help="Non-linear activations in the network"
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
 parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=-1)
-parser.add_argument("--end2end", help="Train the network end to end", action="store_true")
-
-# regularization parameters
-parser.add_argument('--lambda_rec', help='Regularization parameter for W-Net reconstruction', type=float, default=1e-1)
-parser.add_argument('--lambda_dc', help='Regularization parameter for W-Net domain confusion', type=float, default=1e-1)
 
 # optimization parameters
 parser.add_argument("--lr", help="Learning rate of the optimization", type=float, default=1e-3)
@@ -129,9 +125,8 @@ test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
     Build the network
 """
 print('[%s] Building the network' % (datetime.datetime.now()))
-net = WNet2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, lambda_rec=args.lambda_rec,
-             lambda_dc=args.lambda_dc, dropout_enc=args.dropout, activation=args.activation,
-             coi=args.classes_of_interest, input_size=args.input_size)
+net = UNet2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, activation=args.activation,
+             coi=args.classes_of_interest)
 
 """
     Setup optimization for training
@@ -143,34 +138,19 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma
 """
     Train the network
 """
-if args.end2end:
-    print('[%s] Starting end-to-end training' % (datetime.datetime.now()))
-    net.train_mode = JOINT
-    net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
-                  test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-                  print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
-else:
-    print('[%s] Starting reconstruction training' % (datetime.datetime.now()))
-    net.train_mode = RECONSTRUCTION
-    net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
-                  test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-                  print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
-    print('[%s] Starting segmentation training' % (datetime.datetime.now()))
-    optimizer = optim.Adam(net.parameters(), lr=args.lr)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
-    net.train_mode = SEGMENTATION
-    net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
-                  test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-                  print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
+print('[%s] Starting training' % (datetime.datetime.now()))
+net.train_net(train_loader_src, test_loader_src, DiceLoss(), optimizer, args.epochs, scheduler=scheduler,
+              augmenter=augmenter, print_stats=args.print_stats, log_dir=args.log_dir)
 
 """
     Validate the trained network
 """
-net = net.get_unet()
+print('[%s] Performance at final checkpoint' % (datetime.datetime.now()))
 validate(net, test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
          write_dir=os.path.join(args.log_dir, 'segmentation_final'),
          val_file=os.path.join(args.log_dir, 'validation_final.npy'))
-net = torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch')).get_unet()
+net = torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch'))
+print('[%s] Performance at best checkpoint' % (datetime.datetime.now()))
 validate(net, test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
          write_dir=os.path.join(args.log_dir, 'segmentation_best'),
          val_file=os.path.join(args.log_dir, 'validation_best.npy'))
