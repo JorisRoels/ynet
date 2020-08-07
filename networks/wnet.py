@@ -307,7 +307,8 @@ class WNet2D(nn.Module):
         hours = seconds // 3600
         minutes = (seconds - hours * 3600) // 60
         seconds = seconds - hours * 3600 - minutes * 60
-        print_frm('Epoch %5d - Runtime for training: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
+        print_frm(
+            'Epoch %5d - Runtime for training: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
@@ -498,14 +499,15 @@ class WNet2D(nn.Module):
         hours = seconds // 3600
         minutes = (seconds - hours * 3600) // 60
         seconds = seconds - hours * 3600 - minutes * 60
-        print_frm('Epoch %5d - Runtime for testing: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
+        print_frm(
+            'Epoch %5d - Runtime for testing: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # prep for metric computation
         if self.train_mode == SEGMENTATION or self.train_mode == JOINT:
             y_preds = np.concatenate(y_preds, axis=1)
             ys = np.concatenate(ys)
-            js = [jaccard((ys == i).astype(int), y_preds[i, :]) for i in range(1, len(self.coi))]
-            ams = [accuracy_metrics((ys == i).astype(int), y_preds[i, :]) for i in range(1, len(self.coi))]
+            js = np.asarray([jaccard((ys == i).astype(int), y_preds[i, :]) for i in range(len(self.coi))])
+            ams = np.asarray([accuracy_metrics((ys == i).astype(int), y_preds[i, :]) for i in range(len(self.coi))])
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
@@ -528,18 +530,24 @@ class WNet2D(nn.Module):
                 log_scalars([loss_rec_src_avg, loss_rec_tar_avg, loss_dc_x_avg],
                             ['test/' + s for s in ['loss-rec-src', 'loss-rec-tar', 'loss-dc-x']], writer, epoch=epoch)
             elif self.train_mode == SEGMENTATION:
-                log_scalars([loss_seg_src_avg, loss_seg_tar_avg, loss_dc_y_avg, js[0], *(ams[0])],
-                            ['test/' + s for s in
-                             ['loss-seg-src', 'loss-seg-tar', 'loss-dc-y', 'jaccard', 'accuracy', 'balanced-accuracy',
-                              'precision', 'recall', 'f-score']], writer, epoch=epoch)
+                log_scalars(
+                    [loss_seg_src_avg, loss_seg_tar_avg, loss_dc_y_avg, np.mean(js, axis=0), *(np.mean(ams, axis=0))],
+                    ['test/' + s for s in
+                     ['loss-seg-src', 'loss-seg-tar', 'loss-dc-y', 'jaccard', 'accuracy', 'balanced-accuracy',
+                      'precision', 'recall', 'f-score']], writer, epoch=epoch)
             else:
                 log_scalars([loss_seg_src_avg, loss_seg_tar_avg, loss_rec_src_avg, loss_rec_tar_avg, loss_dc_x_avg,
-                             loss_dc_y_avg, js[0], *(ams[0])], ['test/' + s for s in
-                                                                ['loss-seg-src', 'loss-seg-tar', 'loss-rec-src',
-                                                                 'loss-rec-tar',
-                                                                 'loss-dc-x', 'loss-dc-y', 'jaccard', 'accuracy',
-                                                                 'balanced-accuracy', 'precision', 'recall',
-                                                                 'f-score']], writer, epoch=epoch)
+                             loss_dc_y_avg, np.mean(js, axis=0), *(np.mean(ams, axis=0))], ['test/' + s for s in
+                                                                                            ['loss-seg-src',
+                                                                                             'loss-seg-tar',
+                                                                                             'loss-rec-src',
+                                                                                             'loss-rec-tar',
+                                                                                             'loss-dc-x', 'loss-dc-y',
+                                                                                             'jaccard', 'accuracy',
+                                                                                             'balanced-accuracy',
+                                                                                             'precision', 'recall',
+                                                                                             'f-score']], writer,
+                            epoch=epoch)
             log_scalars([total_loss_avg], ['test/' + s for s in
                                            ['total-loss']], writer, epoch=epoch)
 

@@ -7,6 +7,7 @@ from neuralnets.networks.unet import UNetEncoder2D, UNetDecoder2D, UNet2D
 from neuralnets.util.tools import *
 from neuralnets.util.losses import DiceLoss
 from neuralnets.util.io import print_frm
+from neuralnets.util.metrics import jaccard, accuracy_metrics
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -288,7 +289,7 @@ class UNetTS2D(nn.Module):
             loss_seg_src = self.seg_loss(y_src_pred, y_src)
             loss_weights = self.param_regularization_loss(self.src_encoder.parameters(), self.tar_encoder.parameters())
             loss_feature = feature_regularization_loss(f_src[1][-1], f_tar[1][-1], method='coral',
-                                                            n_samples=n_samples_coral)
+                                                       n_samples=n_samples_coral)
             total_loss = loss_seg_src + self.lambda_w * loss_weights + self.lambda_o * loss_feature
             if loader_tar_l is not None:
                 y_tar_l_pred, _ = self.forward_tar(x_tar_l)
@@ -322,7 +323,8 @@ class UNetTS2D(nn.Module):
         hours = seconds // 3600
         minutes = (seconds - hours * 3600) // 60
         seconds = seconds - hours * 3600 - minutes * 60
-        print_frm('Epoch %5d - Runtime for training: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
+        print_frm(
+            'Epoch %5d - Runtime for training: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
@@ -389,6 +391,8 @@ class UNetTS2D(nn.Module):
             dl = zip(loader_src, loader_tar_ul, loader_tar_l)
 
         # start epoch
+        y_preds = []
+        ys = []
         time_start = datetime.datetime.now()
         for i, data in enumerate(dl):
 
@@ -409,12 +413,11 @@ class UNetTS2D(nn.Module):
             loss_seg_src = self.seg_loss(y_src_pred, y_src)
             loss_weights = self.param_regularization_loss(self.src_encoder.parameters(), self.tar_encoder.parameters())
             loss_feature = feature_regularization_loss(f_src[1][-1], f_tar[1][-1], method='coral',
-                                                            n_samples=n_samples_coral)
+                                                       n_samples=n_samples_coral)
             total_loss = loss_seg_src + self.lambda_w * loss_weights + self.lambda_o * loss_feature
-            if loader_tar_l is not None:
-                y_tar_l_pred, _ = self.forward_tar(x_tar_l)
-                loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
-                total_loss = total_loss + loss_seg_tar
+            y_tar_l_pred, _ = self.forward_tar(x_tar_l)
+            loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
+            total_loss = total_loss + loss_seg_tar
 
             # compute loss
             loss_seg_src_cum += loss_seg_src.data.cpu().numpy()
@@ -424,13 +427,24 @@ class UNetTS2D(nn.Module):
             total_loss_cum += total_loss.data.cpu().numpy()
             cnt += 1
 
+            for b in range(y_tar_l_pred.size(0)):
+                y_preds.append(F.softmax(y_tar_l_pred, dim=1)[b, ...].view(y_tar_l_pred.size(1), -1).data.cpu().numpy())
+                ys.append(y_tar_l[b, 0, ...].flatten().cpu().numpy())
+
         # keep track of time
         runtime = datetime.datetime.now() - time_start
         seconds = runtime.total_seconds()
         hours = seconds // 3600
         minutes = (seconds - hours * 3600) // 60
         seconds = seconds - hours * 3600 - minutes * 60
-        print_frm('Epoch %5d - Runtime for testing: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
+        print_frm(
+            'Epoch %5d - Runtime for testing: %d hours, %d minutes, %f seconds' % (epoch, hours, minutes, seconds))
+
+        # prep for metric computation
+        y_preds = np.concatenate(y_preds, axis=1)
+        ys = np.concatenate(ys)
+        js = np.asarray([jaccard((ys == i).astype(int), y_preds[i, :]) for i in range(len(self.coi))])
+        ams = np.asarray([accuracy_metrics((ys == i).astype(int), y_preds[i, :]) for i in range(len(self.coi))])
 
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
@@ -447,9 +461,11 @@ class UNetTS2D(nn.Module):
         if writer is not None:
 
             # always log scalars
-            log_scalars([loss_seg_src_avg, loss_seg_tar_avg, loss_weights_avg, loss_feature_avg, total_loss_avg],
+            log_scalars([loss_seg_src_avg, loss_seg_tar_avg, loss_weights_avg, loss_feature_avg, total_loss_avg,
+                         np.mean(js, axis=0), *(np.mean(ams, axis=0))],
                         ['test/' + s for s in
-                         ['loss-seg-src', 'loss-seg-tar', 'loss-weights', 'loss-features', 'total-loss']], writer,
+                         ['loss-seg-src', 'loss-seg-tar', 'loss-weights', 'loss-features', 'total-loss', 'jaccard',
+                          'accuracy', 'balanced-accuracy', 'precision', 'recall', 'f-score']], writer,
                         epoch=epoch)
 
             # log images if necessary
