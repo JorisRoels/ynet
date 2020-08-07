@@ -143,7 +143,7 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma
 print('[%s] Starting training' % (datetime.datetime.now()))
 net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
               test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-              print_stats=args.print_stats, log_dir=args.log_dir)
+              print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
 
 """
     Validate the trained network
