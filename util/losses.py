@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def feature_regularization_loss(f_src, f_tar, method='coral', n_samples=None):
