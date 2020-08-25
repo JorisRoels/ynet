@@ -13,27 +13,11 @@ from neuralnets.util.tools import module_to_device, tensor_to_device, log_scalar
     augment_samples, get_labels
 from neuralnets.util.io import print_frm
 from torch.utils.tensorboard import SummaryWriter
-from torch.autograd import Function
+from networks.base import ReverseLayerF
 
 SEGMENTATION = 0
 RECONSTRUCTION = 1
 JOINT = 2
-
-
-class ReverseLayerF(Function):
-    """
-    Gradient reversal layer (https://arxiv.org/abs/1505.07818)
-    """
-
-    @staticmethod
-    def forward(ctx, x):
-        return x.view_as(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        output = grad_output.neg()
-
-        return output, None
 
 
 # 2D W-Net model for domain adaptive segmentation

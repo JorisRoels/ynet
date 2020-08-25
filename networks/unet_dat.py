@@ -1,33 +1,28 @@
 import datetime
 import os
 
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from neuralnets.networks.unet import UNetEncoder2D, UNetDecoder2D, UNet2D
-from neuralnets.util.tools import *
-from neuralnets.util.losses import DiceLoss
-from neuralnets.util.io import print_frm
+from neuralnets.networks.unet import UNetEncoder2D, UNetDecoder2D, UNet2D, UNetEncoder3D, UNetDecoder3D, UNet3D
+from neuralnets.networks.cnn import CNN2D
 from neuralnets.util.metrics import jaccard, accuracy_metrics
+from neuralnets.util.losses import DiceLoss
+from neuralnets.util.tools import module_to_device, tensor_to_device, log_scalars, log_images_2d, log_images_3d, \
+    augment_samples, get_labels
+from neuralnets.util.io import print_frm
 from torch.utils.tensorboard import SummaryWriter
-from util.losses import feature_regularization_loss
+from networks.base import ReverseLayerF
 
 
-class UNetTS2D(nn.Module):
-    """
-    2D two-stream U-Net (https://ieeexplore.ieee.org/document/8363602)
-    :param optional in_channels: number of input channels
-    :param optional out_channels: number of output channels
-    :param optional feature_maps: number of initial feature maps
-    :param optional levels: levels of the encoder
-    :param optional skip_connections: use skip connections or not
-    :param optional norm: specify normalization ("batch", "instance" or None)
-    :param optional lambda_w: regularization parameter for the weights
-    :param optional lambda_o: regularization parameter for the feature representations
-    """
+# 2D U-Net model with domain adversarial confusion in the final feature layer for domain adaptive segmentation
+class UNetDAT2D(nn.Module):
 
-    def __init__(self, in_channels=1, coi=(0, 1), feature_maps=64, levels=4, norm="batch", skip_connections=True,
-                 lambda_w=0, lambda_o=0):
-        super(UNetTS2D, self).__init__()
+    def __init__(self, in_channels=1, coi=(0, 1), feature_maps=64, levels=4, norm='instance', lambda_dc=1e0,
+                 dropout=0.0, activation='relu', input_size=(1, 256, 256), conv_channels=(16, 16, 16, 16, 16),
+                 fc_channels=(128, 32)):
+        super(UNetDAT2D, self).__init__()
 
         self.in_channels = in_channels
         self.coi = coi
@@ -35,77 +30,57 @@ class UNetTS2D(nn.Module):
         self.feature_maps = feature_maps
         self.levels = levels
         self.norm = norm
-        self.skip_connections = skip_connections
-        self.lambda_w = lambda_w
-        self.lambda_o = lambda_o
+        self.lambda_dc = lambda_dc
+        self.dropout = dropout
+        # self.seg_loss = nn.CrossEntropyLoss()
         self.seg_loss = DiceLoss()
         self.dc_loss = nn.CrossEntropyLoss()
+        self.input_size = input_size
+        self.conv_channels = conv_channels
+        fc_channels = tuple(np.asarray([*fc_channels, 2]).astype('int'))
+        self.fc_channels = fc_channels
 
-        self.src_encoder = UNetEncoder2D(in_channels=in_channels, feature_maps=feature_maps, levels=levels, norm=norm)
-        self.tar_encoder = UNetEncoder2D(in_channels=in_channels, feature_maps=feature_maps, levels=levels, norm=norm)
-        self.decoder = UNetDecoder2D(self.out_channels, feature_maps=feature_maps, levels=levels,
-                                     skip_connections=skip_connections, norm=norm)
+        # encoder
+        self.encoder = UNetEncoder2D(in_channels=in_channels, feature_maps=feature_maps, levels=levels, norm=norm,
+                                     dropout=dropout, activation=activation)
 
-        index = 0
-        for weight in self.src_encoder.parameters():
-            self.register_parameter('a' + str(index), nn.Parameter(torch.ones(weight.shape)))
-            self.register_parameter('b' + str(index), nn.Parameter(torch.zeros(weight.shape)))
-            index += 1
+        # segmentation decoder
+        self.decoder = UNetDecoder2D(out_channels=self.out_channels, feature_maps=feature_maps, levels=levels,
+                                     norm=norm, activation=activation)
 
-        self.n_params = 2 * index
+        # domain classifiers
+        self.domain_classifier = CNN2D(conv_channels, fc_channels, (feature_maps, *input_size), norm="batch")
 
-    def forward_src(self, inputs):
-
-        # contractive path
-        encoder_outputs, encoded = self.src_encoder(inputs)
-
-        # expansive path
-        decoder_outputs, outputs = self.decoder(encoded, encoder_outputs)
-
-        return outputs, ([*encoder_outputs, encoded], decoder_outputs)
-
-    def forward_tar(self, inputs):
+    def forward(self, x):
 
         # contractive path
-        encoder_outputs, encoded = self.tar_encoder(inputs)
+        encoder_outputs, encoded = self.encoder(x)
 
-        # expansive path
-        decoder_outputs, outputs = self.decoder(encoded, encoder_outputs)
+        # segmentation decoder
+        decoder_outputs, y_pred = self.decoder(encoded, encoder_outputs)
 
-        return outputs, ([*encoder_outputs, encoded], decoder_outputs)
+        # gradient reversal on the final feature layer
+        f_rev = ReverseLayerF.apply(decoder_outputs[-1])
+        dom_pred = self.domain_classifier(f_rev)
 
-    def forward(self, inputs):
+        return y_pred, dom_pred
 
-        # contractive path
-        encoder_outputs_src, final_output_src = self.src_encoder(inputs)
-        encoder_outputs_tar, final_output_tar = self.tar_encoder(inputs)
-
-        # expansive path
-        decoder_outputs_src, outputs_src = self.decoder(final_output_src, encoder_outputs_src)
-        decoder_outputs_tar, outputs_tar = self.decoder(final_output_tar, encoder_outputs_tar)
-
-        return outputs_src, outputs_tar
-
-    def get_unet(self, tar=True):
+    def get_unet(self):
         """
         Get the segmentation network branch
-        :param tar: return the target or source branch
         :return: a U-Net module
         """
         net = UNet2D(in_channels=self.encoder.in_channels, coi=self.coi, feature_maps=self.encoder.feature_maps,
                      levels=self.encoder.levels, skip_connections=self.seg_decoder.skip_connections,
-                     norm=self.encoder.norm)
+                     norm=self.encoder.norm, activation=self.encoder.activation, dropout_enc=self.encoder.dropout)
 
-        if tar:
-            net.encoder.load_state_dict(self.tar_encoder.state_dict())
-        else:
-            net.encoder.load_state_dict(self.src_encoder.state_dict())
-        net.decoder.load_state_dict(self.decoder.state_dict())
+        net.encoder.load_state_dict(self.encoder.state_dict())
+        net.decoder.load_state_dict(self.seg_decoder.state_dict())
 
         return net
 
     def train_epoch(self, loader_src, loader_tar_ul, loader_tar_l, optimizer, epoch, augmenter=None, print_stats=1,
-                    writer=None, write_images=False, device=0, n_samples_coral=64):
+                    writer=None, write_images=False, device=0):
         """
         Trains the network for one epoch
         :param loader_src: source dataloader (labeled)
@@ -118,7 +93,6 @@ class UNetTS2D(nn.Module):
         :param writer: summary writer
         :param write_images: frequency of writing images
         :param device: GPU device where the computations should occur
-        :param n_samples_coral: number of samples selected for CORAL computation
         :return: average training loss over the epoch
         """
         # perform training on GPU/CPU
@@ -128,8 +102,7 @@ class UNetTS2D(nn.Module):
         # keep track of the average loss during the epoch
         loss_seg_src_cum = 0.0
         loss_seg_tar_cum = 0.0
-        loss_weights_cum = 0.0
-        loss_feature_cum = 0.0
+        loss_dc_cum = 0.0
         total_loss_cum = 0.0
         cnt = 0
 
@@ -163,25 +136,24 @@ class UNetTS2D(nn.Module):
             # zero the gradient buffers
             self.zero_grad()
 
+            # get domain labels for domain confusion
+            dom_labels = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
+
             # forward prop and compute loss
             loss_seg_tar = torch.Tensor([0])
-            y_src_pred, f_src = self.forward_src(x_src)
-            y_tar_pred, f_tar = self.forward_tar(x_tar_ul)
-            loss_seg_src = self.seg_loss(y_src_pred, y_src)
-            loss_weights = self.param_regularization_loss(self.src_encoder.parameters(), self.tar_encoder.parameters())
-            loss_feature = feature_regularization_loss(f_src[1][-1], f_tar[1][-1], method='coral',
-                                                       n_samples=n_samples_coral)
-            total_loss = loss_seg_src + self.lambda_w * loss_weights + self.lambda_o * loss_feature
+            y_src_pred, y_src_pred_dom = self(x_src)
+            y_tar_ul_pred, y_tar_ul_pred_dom = self(x_tar_ul)
+            loss_seg_src = self.seg_loss(y_src_pred, y_src[:, 0, ...])
+            loss_dc = self.dc_loss(torch.cat((y_src_pred_dom, y_tar_ul_pred_dom), dim=0), dom_labels)
+            total_loss = loss_seg_src + self.lambda_dc * loss_dc
             if loader_tar_l is not None:
-                y_tar_l_pred, _ = self.forward_tar(x_tar_l)
+                y_tar_l_pred, _ = self(x_tar_l)
                 loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
                 total_loss = total_loss + loss_seg_tar
 
-            # compute loss
             loss_seg_src_cum += loss_seg_src.data.cpu().numpy()
             loss_seg_tar_cum += loss_seg_tar.data.cpu().numpy()
-            loss_weights_cum += loss_weights.data.cpu().numpy()
-            loss_feature_cum += loss_feature.data.cpu().numpy()
+            loss_dc_cum += loss_dc.data.cpu().numpy()
             total_loss_cum += total_loss.data.cpu().numpy()
             cnt += 1
 
@@ -194,9 +166,9 @@ class UNetTS2D(nn.Module):
             # print statistics of necessary
             if i % print_stats == 0:
                 print(
-                    '[%s] Epoch %5d - Iteration %5d/%5d - Loss seg src: %.6f - Loss seg tar: %.6f - Loss weights: %.6f - Loss feature: %.6f - Loss: %.6f'
-                    % (datetime.datetime.now(), epoch, i, len(loader_src.dataset) / loader_src.batch_size, loss_seg_src,
-                       loss_seg_tar, self.lambda_w * loss_weights, self.lambda_o * loss_feature, total_loss))
+                    '[%s] Epoch %5d - Iteration %5d/%5d - Loss seg src: %.6f - Loss seg tar: %.6f - Loss dc: %.6f - Loss: %.6f'
+                    % (datetime.datetime.now(), epoch, i, len(loader_src.dataset) / loader_src.batch_size,
+                       loss_seg_src_cum / cnt, loss_seg_tar_cum / cnt, loss_dc_cum / cnt, total_loss_cum / cnt))
 
         # keep track of time
         runtime = datetime.datetime.now() - time_start
@@ -210,21 +182,17 @@ class UNetTS2D(nn.Module):
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
         loss_seg_tar_avg = loss_seg_tar_cum / cnt
-        loss_weights_avg = loss_weights_cum / cnt
-        loss_feature_avg = loss_feature_cum / cnt
+        loss_dc_avg = loss_dc_cum / cnt
         total_loss_avg = total_loss_cum / cnt
-        print(
-            '[%s] Training Epoch %5d - Loss seg src: %.6f - Loss seg tar: %.6f - Loss weights: %.6f  - Loss feature: %.6f - Loss: %.6f'
-            % (datetime.datetime.now(), epoch, loss_seg_src_avg, loss_seg_tar_avg, loss_weights_avg, loss_feature_avg,
-               total_loss_avg))
+        print('[%s] Training Epoch %4d - Loss seg src: %.6f - Loss seg tar: %.6f - Loss dc: %.6f - Loss: %.6f' % (
+            datetime.datetime.now(), epoch, loss_seg_src_avg, loss_seg_tar_avg, loss_dc_avg, total_loss_avg))
 
         # log everything
         if writer is not None:
 
             # always log scalars
-            log_scalars([loss_seg_src_avg, loss_seg_tar_avg, loss_weights_avg, loss_feature_avg, total_loss_avg],
-                        ['train/' + s for s in
-                         ['loss-seg-src', 'loss-seg-tar', 'loss-weights', 'loss-features', 'total-loss']], writer,
+            log_scalars([loss_seg_src_avg, loss_seg_tar_avg, loss_dc_avg, total_loss_avg],
+                        ['train/' + s for s in ['loss-seg-src', 'loss-seg-tar', 'loss-dc', 'total-loss']], writer,
                         epoch=epoch)
 
             # log images if necessary
@@ -239,8 +207,7 @@ class UNetTS2D(nn.Module):
 
         return total_loss_avg
 
-    def test_epoch(self, loader_src, loader_tar_ul, loader_tar_l, epoch, writer=None, write_images=False, device=0,
-                   n_samples_coral=64):
+    def test_epoch(self, loader_src, loader_tar_ul, loader_tar_l, epoch, writer=None, write_images=False, device=0):
         """
         Trains the network for one epoch
         :param loader_src: source dataloader (labeled)
@@ -250,7 +217,6 @@ class UNetTS2D(nn.Module):
         :param writer: summary writer
         :param write_images: frequency of writing images
         :param device: GPU device where the computations should occur
-        :param n_samples_coral: number of samples selected for CORAL computation
         :return: average training loss over the epoch
         """
         # perform training on GPU/CPU
@@ -260,8 +226,7 @@ class UNetTS2D(nn.Module):
         # keep track of the average loss during the epoch
         loss_seg_src_cum = 0.0
         loss_seg_tar_cum = 0.0
-        loss_weights_cum = 0.0
-        loss_feature_cum = 0.0
+        loss_dc_cum = 0.0
         total_loss_cum = 0.0
         cnt = 0
 
@@ -287,24 +252,21 @@ class UNetTS2D(nn.Module):
             y_src = y_src.long()
             y_tar_l = y_tar_l.long()
 
-            # forward prop and compute loss
-            loss_seg_tar = torch.Tensor([0])
-            y_src_pred, f_src = self.forward_src(x_src)
-            y_tar_pred, f_tar = self.forward_tar(x_tar_ul)
-            loss_seg_src = self.seg_loss(y_src_pred, y_src)
-            loss_weights = self.param_regularization_loss(self.src_encoder.parameters(), self.tar_encoder.parameters())
-            loss_feature = feature_regularization_loss(f_src[1][-1], f_tar[1][-1], method='coral',
-                                                       n_samples=n_samples_coral)
-            total_loss = loss_seg_src + self.lambda_w * loss_weights + self.lambda_o * loss_feature
-            y_tar_l_pred, _ = self.forward_tar(x_tar_l)
-            loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
-            total_loss = total_loss + loss_seg_tar
+            # get domain labels for domain confusion
+            dom_labels = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
 
-            # compute loss
+            # forward prop and compute loss
+            y_src_pred, y_src_pred_dom = self(x_src)
+            y_tar_ul_pred, y_tar_ul_pred_dom = self(x_tar_ul)
+            y_tar_l_pred, _ = self(x_tar_l)
+            loss_seg_src = self.seg_loss(y_src_pred, y_src[:, 0, ...])
+            loss_seg_tar = self.seg_loss(y_tar_l_pred, y_tar_l[:, 0, ...])
+            loss_dc = self.dc_loss(torch.cat((y_src_pred_dom, y_tar_ul_pred_dom), dim=0), dom_labels)
+            total_loss = loss_seg_src + loss_seg_tar + self.lambda_dc * loss_dc
+
             loss_seg_src_cum += loss_seg_src.data.cpu().numpy()
             loss_seg_tar_cum += loss_seg_tar.data.cpu().numpy()
-            loss_weights_cum += loss_weights.data.cpu().numpy()
-            loss_feature_cum += loss_feature.data.cpu().numpy()
+            loss_dc_cum += loss_dc.data.cpu().numpy()
             total_loss_cum += total_loss.data.cpu().numpy()
             cnt += 1
 
@@ -330,34 +292,31 @@ class UNetTS2D(nn.Module):
         # don't forget to compute the average and print it
         loss_seg_src_avg = loss_seg_src_cum / cnt
         loss_seg_tar_avg = loss_seg_tar_cum / cnt
-        loss_weights_avg = loss_weights_cum / cnt
-        loss_feature_avg = loss_feature_cum / cnt
+        loss_dc_avg = loss_dc_cum / cnt
         total_loss_avg = total_loss_cum / cnt
-        print(
-            '[%s] Testing Epoch %5d - Loss seg src: %.6f - Loss seg tar: %.6f - Loss weights: %.6f  - Loss feature: %.6f - Loss: %.6f'
-            % (datetime.datetime.now(), epoch, loss_seg_src_avg, loss_seg_tar_avg, loss_weights_avg, loss_feature_avg,
-               total_loss_avg))
+        print('[%s] Testing Epoch %4d - Loss seg src: %.6f - Loss seg tar: %.6f - Loss dc: %.6f - Loss: %.6f' % (
+            datetime.datetime.now(), epoch, loss_seg_src_avg, loss_seg_tar_avg, loss_dc_avg, total_loss_avg))
 
         # log everything
         if writer is not None:
 
             # always log scalars
-            log_scalars([loss_seg_src_avg, loss_seg_tar_avg, loss_weights_avg, loss_feature_avg, total_loss_avg,
-                         np.mean(js, axis=0), *(np.mean(ams, axis=0))],
-                        ['test/' + s for s in
-                         ['loss-seg-src', 'loss-seg-tar', 'loss-weights', 'loss-features', 'total-loss', 'jaccard',
-                          'accuracy', 'balanced-accuracy', 'precision', 'recall', 'f-score']], writer,
-                        epoch=epoch)
+            log_scalars(
+                [loss_seg_src_avg, loss_seg_tar_avg, loss_dc_avg, total_loss_avg, np.mean(js, axis=0),
+                 *(np.mean(ams, axis=0))], ['test/' + s for s in
+                                            ['loss-seg-src', 'loss-seg-tar', 'loss-dc', 'loss-rec-tar', 'total-loss',
+                                             'jaccard', 'accuracy', 'balanced-accuracy', 'precision', 'recall',
+                                             'f-score']],
+                writer, epoch=epoch)
 
             # log images if necessary
             if write_images:
                 y_src_pred = F.softmax(y_src_pred, dim=1)[:, 1:2, :, :].data
-                log_images_2d([x_src.data, y_src.data, y_src_pred, x_tar_ul.data],
-                              ['test/' + s for s in ['src/x', 'src/y', 'src/y-pred', 'tar/x-ul']], writer, epoch=epoch)
-                if loader_tar_l is not None:
-                    y_tar_l_pred = F.softmax(y_tar_l_pred, dim=1)[:, 1:2, :, :].data
-                    log_images_2d([x_tar_l.data, y_tar_l, y_tar_l_pred],
-                                  ['test/' + s for s in ['tar/x-l', 'tar/y-l', 'tar/y-l-pred']], writer, epoch=epoch)
+                y_tar_l_pred = F.softmax(y_tar_l_pred, dim=1)[:, 1:2, :, :].data
+                log_images_2d([x_src.data, y_src.data, y_src_pred, x_tar_ul.data, x_tar_l.data, y_tar_l, y_tar_l_pred],
+                              ['test/' + s for s in
+                               ['src/x', 'src/y', 'src/y-pred', 'tar/x-ul', 'tar/x-l', 'tar/y-l', 'tar/y-l-pred']],
+                              writer, epoch=epoch)
 
         return total_loss_avg
 
@@ -419,24 +378,3 @@ class UNetTS2D(nn.Module):
             torch.save(self, os.path.join(log_dir, 'checkpoint.pytorch'))
 
         writer.close()
-
-    def param_regularization_loss(self, src_params, tar_params):
-        """
-        Computes the regularization loss on the parameters of the two streams
-        :param src_params: parameters in the source encoder
-        :param tar_params: parameters in the target encoder
-        :return: parameter regularization loss
-        """
-        params = list(self.named_parameters())[:self.n_params]
-        index = 0
-        cum_sum = 0
-        w_loss = 0
-        for src_weight, tar_weight in zip(src_params, tar_params):
-            a = params[2 * index][1]
-            b = params[2 * index + 1][1]
-            d = a.mul(src_weight) + b - tar_weight
-            w_loss = w_loss + torch.norm(d, 2)
-            cum_sum += np.prod(np.array(d.shape))
-            index += 1
-        w_loss = w_loss / cum_sum
-        return w_loss
