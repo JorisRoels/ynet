@@ -63,6 +63,8 @@ parser.add_argument("--train_batch_size", help="Batch size in the training stage
 parser.add_argument("--test_batch_size", help="Batch size in the testing stage", type=int, default=2)
 
 args = parser.parse_args()
+print('[%s] Arguments: ' % (datetime.datetime.now()))
+print('[%s] %s' % (datetime.datetime.now(), args))
 args.input_size = [int(item) for item in args.input_size.split(',')]
 args.classes_of_interest = [int(c) for c in args.classes_of_interest.split(',')]
 
