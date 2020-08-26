@@ -304,9 +304,8 @@ class UNetDAT2D(nn.Module):
             log_scalars(
                 [loss_seg_src_avg, loss_seg_tar_avg, loss_dc_avg, total_loss_avg, np.mean(js, axis=0),
                  *(np.mean(ams, axis=0))], ['test/' + s for s in
-                                            ['loss-seg-src', 'loss-seg-tar', 'loss-dc', 'loss-rec-tar', 'total-loss',
-                                             'jaccard', 'accuracy', 'balanced-accuracy', 'precision', 'recall',
-                                             'f-score']],
+                                            ['loss-seg-src', 'loss-seg-tar', 'loss-dc', 'total-loss', 'jaccard',
+                                             'accuracy', 'balanced-accuracy', 'precision', 'recall', 'f-score']],
                 writer, epoch=epoch)
 
             # log images if necessary
