@@ -201,6 +201,7 @@ class WNet2D(nn.Module):
             dom_labels_x = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
             dom_labels_x[x_src.size(0):] = 1
             dom_labels_y = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
+            dom_labels_y[x_src.size(0):] = 1
 
             # check train mode and compute loss
             loss_seg_src = torch.Tensor([0])
@@ -403,6 +404,7 @@ class WNet2D(nn.Module):
             dom_labels_x = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
             dom_labels_x[x_src.size(0):] = 1
             dom_labels_y = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
+            dom_labels_y[x_src.size(0):] = 1
 
             # check train mode and compute loss
             loss_seg_src = torch.Tensor([0])

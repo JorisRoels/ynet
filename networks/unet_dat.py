@@ -138,6 +138,7 @@ class UNetDAT2D(nn.Module):
 
             # get domain labels for domain confusion
             dom_labels = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
+            dom_labels[x_src.size(0):] = 1
 
             # forward prop and compute loss
             loss_seg_tar = torch.Tensor([0])
@@ -254,6 +255,7 @@ class UNetDAT2D(nn.Module):
 
             # get domain labels for domain confusion
             dom_labels = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
+            dom_labels[x_src.size(0):] = 1
 
             # forward prop and compute loss
             y_src_pred, y_src_pred_dom = self(x_src)
