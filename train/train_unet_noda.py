@@ -14,11 +14,11 @@ import torch.optim as optim
 from neuralnets.util.augmentation import *
 from neuralnets.util.tools import set_seed
 from neuralnets.util.validation import validate
-from neuralnets.networks.unet import UNet2D
 from neuralnets.util.losses import DiceLoss
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
 
+from networks.unet_noda import UNetNoDA2D
 from data.datasets import StronglyLabeledVolumeDataset, UnlabeledVolumeDataset
 
 """
@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser()
 # logging parameters
 parser.add_argument("--seed", help="Seed for randomization", type=int, default=0)
 parser.add_argument("--device", help="GPU device for computations", type=int, default=0)
-parser.add_argument("--log_dir", help="Logging directory", type=str, default="unet")
+parser.add_argument("--log_dir", help="Logging directory", type=str, default="unet_noda")
 parser.add_argument("--print_stats", help="Number of iterations between each time to log training losses",
                     type=int, default=50)
 
@@ -127,8 +127,8 @@ test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
     Build the network
 """
 print('[%s] Building the network' % (datetime.datetime.now()))
-net = UNet2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, activation=args.activation,
-             coi=args.classes_of_interest)
+net = UNetNoDA2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, activation=args.activation,
+                 coi=args.classes_of_interest)
 
 """
     Setup optimization for training
@@ -141,8 +141,9 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma
     Train the network
 """
 print('[%s] Starting training' % (datetime.datetime.now()))
-net.train_net(train_loader_src, test_loader_src, DiceLoss(), optimizer, args.epochs, scheduler=scheduler,
-              augmenter=augmenter, print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
+net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
+              test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
+              print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
 
 """
     Validate the trained network
