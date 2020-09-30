@@ -5,6 +5,5 @@ scikit-image
 torch
 torchvision
 tensorboard
-augmentation
 neuralnets
 future
