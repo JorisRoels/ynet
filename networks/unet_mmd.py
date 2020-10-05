@@ -355,9 +355,9 @@ class UNetMMD2D(nn.Module):
                 # and save model if lower test loss is found
                 if test_loss < test_loss_min:
                     test_loss_min = test_loss
-                    torch.save(self, os.path.join(log_dir, 'best_checkpoint.pytorch'))
+                    torch.save(self.state_dict(), os.path.join(log_dir, 'best_checkpoint.pytorch'))
 
             # save model every epoch
-            torch.save(self, os.path.join(log_dir, 'checkpoint.pytorch'))
+            torch.save(self.state_dict(), os.path.join(log_dir, 'checkpoint.pytorch'))
 
         writer.close()

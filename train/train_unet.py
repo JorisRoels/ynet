@@ -121,14 +121,12 @@ net.train_net(train_loader_src, test_loader_src, DiceLoss(), optimizer, args.epo
 """
     Validate the trained network
 """
-print('[%s] Performance at final checkpoint' % (datetime.datetime.now()))
 validate(net, test_src.data, test_src.labels, args.input_size, batch_size=args.test_batch_size,
-         write_dir=os.path.join(args.log_dir, 'segmentation_final'),
+         classes_of_interest=args.classes_of_interest, write_dir=os.path.join(args.log_dir, 'segmentation_final'),
          val_file=os.path.join(args.log_dir, 'validation_final.npy'))
-net = torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch'))
-print('[%s] Performance at best checkpoint' % (datetime.datetime.now()))
+net.load_state_dict(torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch')))
 validate(net, test_src.data, test_src.labels, args.input_size, batch_size=args.test_batch_size,
-         write_dir=os.path.join(args.log_dir, 'segmentation_best'),
+         classes_of_interest=args.classes_of_interest, write_dir=os.path.join(args.log_dir, 'segmentation_best'),
          val_file=os.path.join(args.log_dir, 'validation_best.npy'))
 
 print('[%s] Finished!' % (datetime.datetime.now()))

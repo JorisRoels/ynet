@@ -168,12 +168,11 @@ else:
 """
     Validate the trained network
 """
-net = net.get_unet()
-validate(net, test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
+validate(net.get_unet(), test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
          write_dir=os.path.join(args.log_dir, 'segmentation_final'),
          val_file=os.path.join(args.log_dir, 'validation_final.npy'))
-net = torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch')).get_unet()
-validate(net, test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
+net.load_state_dict(torch.load(os.path.join(args.log_dir, 'best_checkpoint.pytorch')))
+validate(net.get_unet(), test_tar_l.data, test_tar_l.labels, args.input_size, batch_size=args.test_batch_size,
          write_dir=os.path.join(args.log_dir, 'segmentation_best'),
          val_file=os.path.join(args.log_dir, 'validation_best.npy'))
 
