@@ -35,7 +35,10 @@ parser.add_argument("--print_stats", help="Number of iterations between each tim
                     type=int, default=50)
 
 # network parameters
-parser.add_argument("--data_file", help="Path to the JSON data file", type=str, default="epfl2vnc.json")
+parser.add_argument("--data_file_src", help="Path to the JSON source data file", type=str, default="epfl.json")
+parser.add_argument("--data_file_tar_ul", help="Path to the JSON unlabeled target data file", type=str,
+                    default="vnc_ul.json")
+parser.add_argument("--data_file_tar_l", help="Path to the JSON labeled data file", type=str, default="vnc_l.json")
 parser.add_argument("--input_size", help="Size of the blocks that propagate through the network",
                     type=str, default="256,256")
 parser.add_argument("--fm", help="Number of initial feature maps in the segmentation U-Net", type=int, default=16)
@@ -80,38 +83,36 @@ if not os.path.exists(args.log_dir):
 """
     Load the data
 """
-df = json.load(open(args.data_file))
+df_src = json.load(open(args.data_file_src))
+df_tar_ul = json.load(open(args.data_file_tar_ul))
+df_tar_l = json.load(open(args.data_file_tar_l))
 input_shape = (1, args.input_size[0], args.input_size[1])
 print('[%s] Loading data' % (datetime.datetime.now()))
 augmenter = Compose([ToFloatTensor(device=args.device), Rotate90(), FlipX(prob=0.5), FlipY(prob=0.5),
                      ContrastAdjust(adj=0.1, include_segmentation=True),
                      RandomDeformation_2D(input_shape[1:], grid_size=(64, 64), sigma=0.01, device=args.device,
                                           include_segmentation=True)])
-train_src = StronglyLabeledVolumeDataset(df['source']['raw'], df['source']['labels'],
-                                         split_orientation=df['source']['split-orientation'],
-                                         split_location=df['source']['split-location'], input_shape=input_shape,
-                                         len_epoch=args.len_epoch, type=df['types'], train=True)
-test_src = StronglyLabeledVolumeDataset(df['source']['raw'], df['source']['labels'],
-                                        split_orientation=df['source']['split-orientation'],
-                                        split_location=df['source']['split-location'], input_shape=input_shape,
-                                        len_epoch=args.len_epoch, type=df['types'], train=False)
-train_tar_ul = UnlabeledVolumeDataset(df['target_unlabeled']['raw'],
-                                      split_orientation=df['target_unlabeled']['split-orientation'],
-                                      split_location=df['target_unlabeled']['split-location'], input_shape=input_shape,
-                                      len_epoch=args.len_epoch, type=df['types'], train=True)
-test_tar_ul = UnlabeledVolumeDataset(df['target_unlabeled']['raw'],
-                                     split_orientation=df['target_unlabeled']['split-orientation'],
-                                     split_location=df['target_unlabeled']['split-location'], input_shape=input_shape,
-                                     len_epoch=args.len_epoch, type=df['types'], train=False)
-train_tar_l = StronglyLabeledVolumeDataset(df['target_labeled']['raw'], df['target_labeled']['labels'],
-                                           split_orientation=df['target_labeled']['split-orientation'],
-                                           split_location=df['target_labeled']['split-location'],
-                                           input_shape=input_shape, len_epoch=args.len_epoch, type=df['types'],
-                                           train=True, available=args.available_target_labels)
-test_tar_l = StronglyLabeledVolumeDataset(df['target_labeled']['raw'], df['target_labeled']['labels'],
-                                          split_orientation=df['target_labeled']['split-orientation'],
-                                          split_location=df['target_labeled']['split-location'],
-                                          input_shape=input_shape, len_epoch=args.len_epoch, type=df['types'],
+train_src = StronglyLabeledVolumeDataset(df_src['raw'], df_src['labels'], split_orientation=df_src['split-orientation'],
+                                         split_location=df_src['split-location'], input_shape=input_shape,
+                                         len_epoch=args.len_epoch, type=df_src['type'], train=True)
+test_src = StronglyLabeledVolumeDataset(df_src['raw'], df_src['labels'], split_orientation=df_src['split-orientation'],
+                                        split_location=df_src['split-location'], input_shape=input_shape,
+                                        len_epoch=args.len_epoch, type=df_src['type'], train=False)
+train_tar_ul = UnlabeledVolumeDataset(df_tar_ul['raw'], split_orientation=df_tar_ul['split-orientation'],
+                                      split_location=df_tar_ul['split-location'], input_shape=input_shape,
+                                      len_epoch=args.len_epoch, type=df_tar_ul['type'], train=True)
+test_tar_ul = UnlabeledVolumeDataset(df_tar_ul['raw'], split_orientation=df_tar_ul['split-orientation'],
+                                     split_location=df_tar_ul['split-location'], input_shape=input_shape,
+                                     len_epoch=args.len_epoch, type=df_tar_ul['type'], train=False)
+train_tar_l = StronglyLabeledVolumeDataset(df_tar_l['raw'], df_tar_l['labels'],
+                                           split_orientation=df_tar_l['split-orientation'],
+                                           split_location=df_tar_l['split-location'], input_shape=input_shape,
+                                           len_epoch=args.len_epoch, type=df_tar_l['type'], train=True,
+                                           available=args.available_target_labels)
+test_tar_l = StronglyLabeledVolumeDataset(df_tar_l['raw'], df_tar_l['labels'],
+                                          split_orientation=df_tar_l['split-orientation'],
+                                          split_location=df_tar_l['split-location'], input_shape=input_shape,
+                                          len_epoch=args.len_epoch, type=df_tar_l['type'],
                                           train=False)
 train_loader_src = DataLoader(train_src, batch_size=args.train_batch_size)
 test_loader_src = DataLoader(test_src, batch_size=args.test_batch_size)

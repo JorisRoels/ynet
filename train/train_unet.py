@@ -86,14 +86,12 @@ augmenter = Compose([ToFloatTensor(device=args.device), Rotate90(), FlipX(prob=0
                      ContrastAdjust(adj=0.1, include_segmentation=True),
                      RandomDeformation_2D(input_shape[1:], grid_size=(64, 64), sigma=0.01, device=args.device,
                                           include_segmentation=True)])
-train_src = StronglyLabeledVolumeDataset(df['source']['raw'], df['source']['labels'],
-                                         split_orientation=df['source']['split-orientation'],
-                                         split_location=df['source']['split-location'], input_shape=input_shape,
-                                         len_epoch=args.len_epoch, type=df['types'], train=True)
-test_src = StronglyLabeledVolumeDataset(df['source']['raw'], df['source']['labels'],
-                                        split_orientation=df['source']['split-orientation'],
-                                        split_location=df['source']['split-location'], input_shape=input_shape,
-                                        len_epoch=args.len_epoch, type=df['types'], train=False)
+train_src = StronglyLabeledVolumeDataset(df['raw'], df['labels'], split_orientation=df['split-orientation'],
+                                         split_location=df['split-location'], input_shape=input_shape,
+                                         len_epoch=args.len_epoch, type=df['type'], train=True)
+test_src = StronglyLabeledVolumeDataset(df['raw'], df['labels'], split_orientation=df['split-orientation'],
+                                        split_location=df['split-location'], input_shape=input_shape,
+                                        len_epoch=args.len_epoch, type=df['type'], train=False)
 train_loader_src = DataLoader(train_src, batch_size=args.train_batch_size)
 test_loader_src = DataLoader(test_src, batch_size=args.test_batch_size)
 

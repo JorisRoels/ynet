@@ -1,9 +1,7 @@
 {
-    "source": {
-      "raw": "/home/jorisro/research/data/EM/EPFL_V2/raw",
-      "labels": "/home/jorisro/research/data/EM/EPFL_V2/labels",
-      "split-orientation": "z",
-      "split-location": 0.50
-    },
-    "types": "pngseq"
+    "raw": "/home/jorisro/research/data/EM/EPFL_V2/raw",
+    "labels": "/home/jorisro/research/data/EM/EPFL_V2/labels",
+    "split-orientation": "z",
+    "split-location": 0.50,
+    "type": "pngseq"
 }
