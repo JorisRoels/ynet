@@ -69,9 +69,8 @@ if not os.path.exists(args.log_dir):
 df = json.load(open(args.data_file))
 input_shape = (1, args.input_size[0], args.input_size[1])
 print('[%s] Loading data' % (datetime.datetime.now()))
-test_src = StronglyLabeledVolumeDataset(df['source']['raw'], df['source']['labels'],
-                                        split_orientation=df['source']['split-orientation'],
-                                        split_location=df['source']['split-location'], type=df['types'], train=False)
+test_src = StronglyLabeledVolumeDataset(df['raw'], df['labels'], split_orientation=df['split-orientation'],
+                                        split_location=df['split-location'], type=df['types'], train=False)
 
 """
     Load the network
