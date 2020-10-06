@@ -70,7 +70,7 @@ df = json.load(open(args.data_file))
 input_shape = (1, args.input_size[0], args.input_size[1])
 print('[%s] Loading data' % (datetime.datetime.now()))
 test_src = StronglyLabeledVolumeDataset(df['raw'], df['labels'], split_orientation=df['split-orientation'],
-                                        split_location=df['split-location'], type=df['types'], train=False)
+                                        split_location=df['split-location'], type=df['type'], train=False)
 
 """
     Load the network
