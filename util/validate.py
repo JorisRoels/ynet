@@ -10,16 +10,18 @@ import datetime
 import os
 import json
 
-import torch.optim as optim
 from neuralnets.util.augmentation import *
 from neuralnets.util.tools import set_seed
 from neuralnets.util.validation import validate
-from neuralnets.util.losses import DiceLoss
 from neuralnets.networks.unet import UNet2D
-from torch.utils.data import DataLoader
-from torchvision.transforms import Compose
 
 from data.datasets import StronglyLabeledVolumeDataset
+from networks.unet_noda import UNetNoDA2D
+from networks.unet_dat import UNetDAT2D
+from networks.unet_mmd import UNetMMD2D
+from networks.unet_ts import UNetTS2D
+from networks.wnet import WNet2D
+from networks.ynet import YNet2D
 
 """
     Parse all the arguments
@@ -35,10 +37,17 @@ parser.add_argument("--print_stats", help="Number of iterations between each tim
                     type=int, default=50)
 
 # network parameters
-parser.add_argument("--net", help="Path to the network parameters", type=str, default="../train/unet/checkpoint.pytorch")
+parser.add_argument("--net", help="Path to the network parameters", type=str,
+                    default="../train/unet/checkpoint.pytorch")
 parser.add_argument("--data_file", help="Path to the JSON data file", type=str, default="../train/epfl.json")
 parser.add_argument("--input_size", help="Size of the blocks that propagate through the network",
                     type=str, default="256,256")
+parser.add_argument("--fm", help="Number of initial feature maps in the segmentation U-Net", type=int, default=16)
+parser.add_argument("--levels", help="Number of levels in the segmentation U-Net (i.e. number of pooling stages)",
+                    type=int, default=4)
+parser.add_argument("--dropout", help="Dropout", type=float, default=0.00)
+parser.add_argument("--norm", help="Normalization in the network (batch or instance)", type=str, default="instance")
+parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
 
@@ -76,7 +85,27 @@ test_src = StronglyLabeledVolumeDataset(df['raw'], df['labels'], split_orientati
     Load the network
 """
 print('[%s] Loading the network' % (datetime.datetime.now()))
-net = torch.load(args.net, map_location='cuda:' + str(args.device))
+
+
+def _load_net(path, device):
+    net_state = torch.load(path, map_location='cuda:' + str(device))
+
+    # attempt to load the various networks
+    modules = [UNetNoDA2D, UNetDAT2D, UNetMMD2D, UNetTS2D, WNet2D, YNet2D]
+    net = None
+    for module in modules:
+        try:
+            net = module(feature_maps=args.fm, levels=args.levels, norm=args.norm, activation=args.activation,
+                         coi=args.classes_of_interest)
+            net.load_state_dict(net_state)
+            break
+        except RuntimeError:
+            continue
+
+    return net
+
+
+net = _load_net(args.net, args.device)
 if net.__class__ != UNet2D:
     net = net.get_unet()
 
