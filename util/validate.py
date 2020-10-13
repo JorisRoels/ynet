@@ -113,6 +113,7 @@ if net.__class__ != UNet2D:
     Validate the trained network
 """
 validate(net, test_src.data, test_src.labels, args.input_size, batch_size=args.test_batch_size, track_progress=True,
-         write_dir=os.path.join(args.log_dir, 'segmentation'), val_file=os.path.join(args.log_dir, 'validation.npy'))
+         write_dir=os.path.join(args.log_dir, 'segmentation'), val_file=os.path.join(args.log_dir, 'validation.npy'),
+         device=args.device)
 
 print('[%s] Finished!' % (datetime.datetime.now()))
