@@ -1,9 +1,7 @@
 import argparse
 import numpy as np
 import os
-from neuralnets.util.io import print_frm, mkdir
-import pickle
-import pandas as pd
+from neuralnets.util.io import print_frm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--basepath", help="Base path of the domains", type=str,
@@ -24,8 +22,6 @@ metrics = ['mIoU', 'Accuracy', 'Balanced accuracy', 'Precision', 'Recall', 'F1 s
 # load results and save a dataframe
 results_final = []
 results_best = []
-df_final = pd.DataFrame(columns=['measurement', 'metric', 'domain', 'experiment', 'class'])
-df_best = pd.DataFrame(columns=['measurement', 'metric', 'domain', 'experiment', 'class'])
 for i, dom in enumerate(domains):
     results_dom_final = []
     results_dom_best = []
@@ -34,13 +30,6 @@ for i, dom in enumerate(domains):
         r_best = np.load(os.path.join(basepath, dom, str(n), 'validation_best.npy'))
         results_dom_final.append(r_final)
         results_dom_best.append(r_best)
-        for j, metric in enumerate(metrics):
-            df_final = df_final.append(
-                {'measurement': r_final.mean(axis=0)[j], 'metric': metric, 'domain': dom, 'experiment': n,
-                 'class': classes[i]}, ignore_index=True)
-            df_best = df_best.append(
-                {'measurement': r_best.mean(axis=0)[j], 'metric': metric, 'domain': dom, 'experiment': n,
-                 'class': classes[i]}, ignore_index=True)
     results_final.append(results_dom_final)
     results_best.append(results_dom_best)
 results_final = np.asarray(results_final)  # D x N x C x M
@@ -73,9 +62,3 @@ for i, dom in enumerate(domains):
 
     print_frm('=================================================')
     print_frm('')
-
-mkdir(args.dest_results)
-with open(os.path.join(args.dest_results, 'results_final.pickle'), 'wb') as results_file:
-    pickle.dump(df_final, results_file)
-with open(os.path.join(args.dest_results, 'results_best.pickle'), 'wb') as results_file:
-    pickle.dump(df_best, results_file)
