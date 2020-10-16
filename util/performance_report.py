@@ -7,12 +7,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--basepath", help="Base path of the domains", type=str,
                     default="../train/exp/full-target-supervision")
 parser.add_argument("--domains", help="Domains", type=str, default="epfl,mira,vnc,embl-hela")
-parser.add_argument("--classes", help="Classes", type=str, default="M,M,M,ER")
 parser.add_argument("--n_exp", help="Number of experiments", type=int, default=5)
-parser.add_argument("--dest_results", help="Destination of the results file", type=str, default="results")
 args = parser.parse_args()
 domains = [item for item in args.domains.split(',')]
-classes = [item for item in args.classes.split(',')]
 
 # parameters
 basepath = args.basepath
