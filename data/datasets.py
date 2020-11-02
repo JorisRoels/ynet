@@ -146,8 +146,9 @@ class VolumeDataset(data.Dataset):
             self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
         if available >= 0:
             self.data = _select_subset(self.data, available=available)
-        print_frm('Used for training: %d x %d x %d (total: %d)' % (
-            self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
+        t_str = 'training' if train else 'testing'
+        print_frm('Used for %s: %d x %d x %d (total: %d)' % (
+            t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
 
     def __getitem__(self, i):
         pass
@@ -365,15 +366,16 @@ class MultiVolumeDataset(data.Dataset):
             if scaling is not None:
                 target_size = np.asarray(np.multiply(data.shape, scaling), dtype=int)
                 data = F.interpolate(torch.Tensor(data[np.newaxis, np.newaxis, ...]), size=tuple(target_size),
-                                  mode='area')[0, 0, ...].numpy()
+                                     mode='area')[0, 0, ...].numpy()
 
             # select a crop of the data if necessary
             print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
                 data.shape[0], data.shape[1], data.shape[2], data.size))
             if available >= 0:
                 data = _select_subset(data, available=available)
-            print_frm('Used for training: %d x %d x %d (total: %d)' % (
-                data.shape[0], data.shape[1], data.shape[2], data.size))
+            t_str = 'training' if train else 'testing'
+            print_frm('Used for %s: %d x %d x %d (total: %d)' % (
+                t_str, data.shape[0], data.shape[1], data.shape[2], data.size))
 
             self.data.append(data)
             self.data_sizes.append(data.size)
