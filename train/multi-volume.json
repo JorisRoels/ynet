@@ -1,0 +1,18 @@
+{
+    "raw": [
+      "/home/jorisro/research/data/EM/EPFL_V2/raw",
+      "/home/jorisro/research/data/EM/VNC/raw"
+    ],
+    "split-orientation": [
+      "z",
+      "x"
+    ],
+    "split-location": [
+      0.5,
+      0.6
+    ],
+    "types": [
+      "pngseq",
+      "pngseq"
+    ]
+}
