@@ -448,6 +448,6 @@ class UnlabeledMultiVolumeDataset(MultiVolumeDataset):
 
         if input.shape[0] > 1:
             # add channel axis if the data is 3D
-            return input[np.newaxis, ...]
+            return input[np.newaxis, ...], self.k
         else:
-            return input
+            return input, self.k

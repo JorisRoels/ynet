@@ -13,12 +13,11 @@ import json
 import torch.optim as optim
 from neuralnets.util.augmentation import *
 from neuralnets.util.tools import set_seed
-from neuralnets.util.losses import DiceLoss
-from neuralnets.networks.bvae import BVAE
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
 
 from data.datasets import UnlabeledMultiVolumeDataset
+from networks.daae import DAAE2D
 
 """
     Parse all the arguments
@@ -44,7 +43,7 @@ parser.add_argument("--dropout", help="Dropout", type=float, default=0.25)
 parser.add_argument("--norm", help="Normalization in the network (batch or instance)", type=str, default="batch")
 parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
 parser.add_argument("--bottleneck", help="Feature dimensionality of the bottleneck layer", type=int, default=128)
-parser.add_argument("--beta", help="Beta parameter value for KL divergence", type=float, default=1e-4)
+parser.add_argument("--lambda_reg", help="Regularization parameter for domain confusion", type=float, default=1e-2)
 
 # optimization parameters
 parser.add_argument("--lr", help="Learning rate of the optimization", type=float, default=1e-3)
@@ -96,8 +95,9 @@ test_loader = DataLoader(test, batch_size=args.test_batch_size)
     Build the network
 """
 print('[%s] Building the network' % (datetime.datetime.now()))
-net = BVAE(beta=args.beta, input_size=args.input_size, bottleneck_dim=args.bottleneck, feature_maps=args.fm,
-           levels=args.levels, dropout_enc=args.dropout, norm=args.norm, activation=args.activation)
+net = DAAE2D(lambda_reg=args.lambda_reg, input_size=args.input_size, bottleneck_dim=args.bottleneck,
+             feature_maps=args.fm, levels=args.levels, dropout_enc=args.dropout, norm=args.norm,
+             activation=args.activation, fc_channels=(64, len(df['raw'])))
 
 """
     Setup optimization for training
