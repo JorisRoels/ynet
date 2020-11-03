@@ -191,7 +191,7 @@ class DAAE2D(nn.Module):
             if i == len(fc_channels) - 1:
                 fc = Linear(in_channels, out_channels)
             else:
-                fc = Linear(in_channels, out_channels, norm=norm, activation=activation)
+                fc = Linear(in_channels, out_channels, norm="batch", activation=activation)
             self.domain_classifier.add_module('linear%d' % (i + 1), fc)
             in_channels = out_channels
 
