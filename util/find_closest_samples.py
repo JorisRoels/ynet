@@ -112,7 +112,7 @@ net = _load_net(model_file, device)
 
 # load reference patch
 print_frm('Loading data')
-data_file = '/home/jorisro/research/ynet/train/joint.json'
+data_file = args.data_file
 df = json.load(open(data_file))
 n_domains = len(df['raw'])
 input_shape = (1, input_size[0], input_size[1])
