@@ -151,11 +151,17 @@ class UNetTS2D(nn.Module):
 
             # augment if necessary
             if loader_tar_l is None:
-                data_aug = (data_src[0], x_tar_ul, data_src[1], x_tar_ul)
-                x_src, x_tar_ul, y_src, _ = augment_samples(data_aug, augmenter=augmenter)
+                data_aug = (data_src[0], data_src[1])
+                x_src, y_src = augment_samples(data_aug, augmenter=augmenter)
+                data_aug = (x_tar_ul, x_tar_ul)
+                x_tar_ul, _ = augment_samples(data_aug, augmenter=augmenter)
             else:
-                data_aug = (data_src[0], x_tar_ul, data_tar_l[0], data_src[1], x_tar_ul, data_tar_l[1])
-                x_src, x_tar_ul, x_tar_l, y_src, _, y_tar_l = augment_samples(data_aug, augmenter=augmenter)
+                data_aug = (data_src[0], data_src[1])
+                x_src, y_src = augment_samples(data_aug, augmenter=augmenter)
+                data_aug = (x_tar_ul, x_tar_ul)
+                x_tar_ul, _ = augment_samples(data_aug, augmenter=augmenter)
+                data_aug = (data_tar_l[0], data_tar_l[1])
+                x_tar_l, y_tar_l = augment_samples(data_aug, augmenter=augmenter)
                 y_tar_l = get_labels(y_tar_l, coi=self.coi, dtype=int)
             y_src = get_labels(y_src, coi=self.coi, dtype=int)
             x_tar_ul = x_tar_ul.float()
