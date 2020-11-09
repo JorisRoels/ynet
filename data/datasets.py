@@ -73,13 +73,21 @@ def _select_subset(data, available=-1):
     z, y, x = data.shape
     n = data.size
 
-    # compute fraction of data to select
+    # compute size fraction of data to select
     f = available / n
     f3 = np.power(f, 1 / 3)
     z_, y_, x_ = int(z * f3), int(y * f3), int(x * f3)
 
+    # compute start and stop positions of the fractions
+    z_start = np.random.randint(0, z - z_ + 1)
+    z_stop = z_start + z_
+    y_start = np.random.randint(0, y - y_ + 1)
+    y_stop = y_start + y_
+    x_start = np.random.randint(0, x - x_ + 1)
+    x_stop = x_start + x_
+
     # select the data and return
-    return data[:z_, :y_, :x_]
+    return data[z_start:z_stop, y_start:y_stop, x_start:x_stop], (z_start, z_stop, y_start, y_stop, x_start, x_stop)
 
 
 class VolumeDataset(data.Dataset):
@@ -145,7 +153,7 @@ class VolumeDataset(data.Dataset):
         print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
             self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
         if available >= 0:
-            self.data = _select_subset(self.data, available=available)
+            self.data, self.available_coos = _select_subset(self.data, available=available)
         t_str = 'training' if train else 'testing'
         print_frm('Used for %s: %d x %d x %d (total: %d)' % (
             t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
@@ -223,7 +231,8 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
 
         # select a crop of the data if necessary
         if available >= 0:
-            self.labels = _select_subset(self.labels, available=available)
+            z_start, z_stop, y_start, y_stop, x_start, x_stop = self.available_coos
+            self.labels = self.labels[z_start:z_stop, y_start:y_stop, x_start:x_stop]
 
     def __getitem__(self, i):
 
@@ -247,8 +256,7 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
             # add channel axis if the data is 3D
             input, target = input[np.newaxis, ...], target[np.newaxis, ...]
 
-        if len(np.intersect1d(np.unique(target),
-                              self.coi)) == 0:  # make sure we have at least one labeled pixel in the sample, otherwise processing is useless
+        if len(np.intersect1d(np.unique(target), self.coi)) == 0:  # make sure we have at least one labeled pixel in the sample, otherwise processing is useless
             return self.__getitem__(i)
         else:
             return input, target
