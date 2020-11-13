@@ -93,8 +93,7 @@ class UNetTS2D(nn.Module):
         :return: a U-Net module
         """
         net = UNet2D(in_channels=self.encoder.in_channels, coi=self.coi, feature_maps=self.encoder.feature_maps,
-                     levels=self.encoder.levels, skip_connections=self.seg_decoder.skip_connections,
-                     norm=self.encoder.norm)
+                     levels=self.encoder.levels, skip_connections=self.decoder.skip_connections, norm=self.encoder.norm)
 
         if tar:
             net.encoder.load_state_dict(self.tar_encoder.state_dict())
