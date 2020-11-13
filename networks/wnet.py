@@ -69,8 +69,8 @@ class WNet2D(nn.Module):
                                          norm=norm, dropout=dropout_dec, activation=activation)
 
         # domain classifiers
-        self.rec_dc = CNN2D(conv_channels, fc_channels, (1, *input_size), norm="batch")
-        self.seg_dc = CNN2D(conv_channels, fc_channels, (2, *input_size), norm="batch")
+        self.rec_dc = CNN2D(conv_channels, fc_channels, (1, *input_size), norm=None)
+        self.seg_dc = CNN2D(conv_channels, fc_channels, (2, *input_size), norm=None)
 
     def forward_rec(self, x, add_noise=True):
 
@@ -90,7 +90,7 @@ class WNet2D(nn.Module):
 
         # gradient reversal on the predicted image
         x_rec_rev = ReverseLayerF.apply(x_rec)
-        rec_dom_pred = self.rec_dc(x_rec_rev)
+        rec_dom_pred = self.rec_dc(F.interpolate(x_rec_rev, size=self.input_size, mode='bilinear', align_corners=True))
 
         return x_rec, rec_dom_pred
 
@@ -104,7 +104,7 @@ class WNet2D(nn.Module):
 
         # gradient reversal on the predicted segmentation
         y_pred_rev = ReverseLayerF.apply(torch.softmax(y_pred, dim=1))
-        seg_dom_pred = self.seg_dc(y_pred_rev)
+        seg_dom_pred = self.seg_dc(F.interpolate(y_pred_rev, size=self.input_size, mode='bilinear', align_corners=True))
 
         return y_pred, seg_dom_pred
 

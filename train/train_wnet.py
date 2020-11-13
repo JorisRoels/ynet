@@ -54,6 +54,8 @@ parser.add_argument("--end2end", help="Train the network end to end", action="st
 # regularization parameters
 parser.add_argument('--lambda_rec', help='Regularization parameter for W-Net reconstruction', type=float, default=1e-1)
 parser.add_argument('--lambda_dc', help='Regularization parameter for W-Net domain confusion', type=float, default=1e-1)
+parser.add_argument("--conv_channels", help="Amount of convolutional channels", type=str, default="16,16,16,16,16")
+parser.add_argument("--fc_channels", help="Amount of fully connected channels", type=str, default="128,32")
 
 # optimization parameters
 parser.add_argument("--lr", help="Learning rate of the optimization", type=float, default=1e-3)
@@ -71,6 +73,8 @@ print('[%s] Arguments: ' % (datetime.datetime.now()))
 print('[%s] %s' % (datetime.datetime.now(), args))
 args.input_size = [int(item) for item in args.input_size.split(',')]
 args.classes_of_interest = [int(c) for c in args.classes_of_interest.split(',')]
+args.conv_channels = [int(c) for c in args.conv_channels.split(',')]
+args.fc_channels = [int(c) for c in args.fc_channels.split(',')]
 
 """
 Fix seed (for reproducibility)
@@ -134,7 +138,8 @@ test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
 print('[%s] Building the network' % (datetime.datetime.now()))
 net = WNet2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, lambda_rec=args.lambda_rec,
              lambda_dc=args.lambda_dc, dropout_enc=args.dropout, activation=args.activation,
-             coi=args.classes_of_interest, input_size=args.input_size)
+             coi=args.classes_of_interest, input_size=args.input_size, conv_channels=args.conv_channels,
+             fc_channels=args.fc_channels)
 
 """
     Setup optimization for training
