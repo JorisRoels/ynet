@@ -75,7 +75,7 @@ class UNetDAT2D(nn.Module):
                      norm=self.encoder.norm, activation=self.encoder.activation, dropout_enc=self.encoder.dropout)
 
         net.encoder.load_state_dict(self.encoder.state_dict())
-        net.decoder.load_state_dict(self.seg_decoder.state_dict())
+        net.decoder.load_state_dict(self.decoder.state_dict())
 
         return net
 
