@@ -20,7 +20,7 @@ def _crop2match(f, g):
             rest = g.size(d) - f.size(d) - (diff // 2)
             g = torch.split(g, [diff // 2, f.size(d), rest], dim=d)[1]
 
-    return f, g
+    return f.contiguous(), g.contiguous()
 
 
 def feature_regularization_loss(f_src, f_tar, method='coral', n_samples=None):
