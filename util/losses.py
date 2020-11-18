@@ -2,16 +2,40 @@ import torch
 import numpy as np
 
 
+def _crop2match(f, g):
+    """
+    Center crops the largest tensor of two so that its size matches the other tensor
+    :param f: first tensor
+    :param g: second tensor
+    :return: the cropped tensors
+    """
+
+    for d in range(f.ndim):
+        if f.size(d) > g.size(d):  # crop f
+            diff = f.size(d) - g.size(d)
+            rest = f.size(d) - g.size(d) - (diff // 2)
+            f = torch.split(f, [diff // 2, g.size(d), rest], dim=d)[1]
+        elif g.size(d) > f.size(d):  # crop g
+            diff = g.size(d) - f.size(d)
+            rest = g.size(d) - f.size(d) - (diff // 2)
+            g = torch.split(g, [diff // 2, f.size(d), rest], dim=d)[1]
+
+    return f, g
+
+
 def feature_regularization_loss(f_src, f_tar, method='coral', n_samples=None):
     """
     Compute the regularization loss between the feature representations (shape [B, C, Y, X]) of the two streams
     In case of high dimensionality, there is an option to subsample
-    :param src: features of the source stream
-    :param tar: features of the target stream
+    :param f_src: features of the source stream
+    :param f_tar: features of the target stream
     :param method: regularization method ('coral' or 'mmd')
     :param optional n_samples: number of samples to be selected
     :return: regularization loss
     """
+
+    # if the samples are not equally sized, center crop the largest one
+    f_src, f_tar = _crop2match(f_src, f_tar)
 
     # view features to [N, D] shape
     src = f_src.view(f_src.size(0), -1)
