@@ -136,8 +136,10 @@ class UNetDAT2D(nn.Module):
                 data_aug = (data_tar_l[0], data_tar_l[1])
                 x_tar_l, y_tar_l = augment_samples(data_aug, augmenter=augmenter)
                 y_tar_l = get_labels(y_tar_l, coi=self.coi, dtype=int)
+                x_tar_l = F.interpolate(x_tar_l, x_src.size()[2:], mode='bilinear')
             y_src = get_labels(y_src, coi=self.coi, dtype=int)
             x_tar_ul = x_tar_ul.float()
+            x_tar_ul = F.interpolate(x_tar_ul, x_src.size()[2:], mode='bilinear')
 
             # zero the gradient buffers
             self.zero_grad()
@@ -258,6 +260,8 @@ class UNetDAT2D(nn.Module):
             x_tar_l = x_tar_l.float()
             y_src = y_src.long()
             y_tar_l = y_tar_l.long()
+            x_tar_ul = F.interpolate(x_tar_ul, x_src.size()[2:], mode='bilinear')
+            x_tar_l = F.interpolate(x_tar_l, x_src.size()[2:], mode='bilinear')
 
             # get domain labels for domain confusion
             dom_labels = tensor_to_device(torch.zeros((x_src.size(0) + x_tar_ul.size(0))), device).long()
