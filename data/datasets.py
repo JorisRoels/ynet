@@ -68,15 +68,19 @@ def _validate_shape(input_shape, data_shape, orientation=0, in_channels=1, level
     return tuple(input_shape)
 
 
-def _select_subset(data, available=-1):
+def _select_subset(data, d=-1, min_sz=(1, 256, 256)):
+
     # data dimensions
     z, y, x = data.shape
-    n = data.size
 
     # compute size fraction of data to select
-    f = available / n
-    f3 = np.power(f, 1 / 3)
-    z_, y_, x_ = int(z * f3), int(y * f3), int(x * f3)
+    z_, y_, x_ = min_sz
+    z_ += ((d - z_ * y_ * x_) // (y_ * x_))
+    z_ = min(z_, z)
+    y_ += ((d - z_ * y_ * x_) // (x_ * z_))
+    y_ = min(y_, y)
+    x_ += ((d - z_ * y_ * x_) // (y_ * z_))
+    x_ = min(x_, x)
 
     # compute start and stop positions of the fractions
     z_start = np.random.randint(0, z - z_ + 1)
@@ -153,7 +157,7 @@ class VolumeDataset(data.Dataset):
         print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
             self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
         if available >= 0:
-            self.data, self.available_coos = _select_subset(self.data, available=available)
+            self.data, self.available_coos = _select_subset(self.data, d=available)
         t_str = 'training' if train else 'testing'
         print_frm('Used for %s: %d x %d x %d (total: %d)' % (
             t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
@@ -380,7 +384,7 @@ class MultiVolumeDataset(data.Dataset):
             print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
                 data.shape[0], data.shape[1], data.shape[2], data.size))
             if available >= 0:
-                data = _select_subset(data, available=available)
+                data = _select_subset(data, d=available)
             t_str = 'training' if train else 'testing'
             print_frm('Used for %s: %d x %d x %d (total: %d)' % (
                 t_str, data.shape[0], data.shape[1], data.shape[2], data.size))
