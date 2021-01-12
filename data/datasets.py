@@ -116,7 +116,7 @@ class VolumeDataset(data.Dataset):
 
     def __init__(self, data_path, input_shape, split_orientation='z', split_location=0.50, scaling=None, len_epoch=1000,
                  type='tif3d', in_channels=1, orientations=(0,), batch_size=1, dtype='uint8', norm_type='unit',
-                 train=True, available=-1):
+                 train=True, available=-1, coi=None):
         self.data_path = data_path
         self.input_shape = input_shape
         self.split_orientation = split_orientation
@@ -157,7 +157,19 @@ class VolumeDataset(data.Dataset):
         print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
             self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
         if available >= 0:
-            self.data, self.available_coos = _select_subset(self.data, d=available)
+            crop, available_coos = _select_subset(self.data, d=available)
+            if coi is not None:  # check whether all classes of interest are in the crop
+                unique = np.unique(crop)
+                v = [u in unique for u in coi]
+                b = np.sum(v) == len(v)
+                while not b:
+                    print_frm('Attempting to find crop with all classes of interest...')
+                    crop, available_coos = _select_subset(self.data, d=available)
+                    unique = np.unique(crop)
+                    v = [u in unique for u in coi]
+                    b = np.sum(v) == len(v)
+                print_frm('Crop with all classes of interest found! ')
+            self.data, self.available_coos = crop, available_coos
         t_str = 'training' if train else 'testing'
         print_frm('Used for %s: %d x %d x %d (total: %d)' % (
             t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
@@ -207,7 +219,7 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
         super().__init__(data_path, input_shape, split_orientation=split_orientation, split_location=split_location,
                          scaling=scaling, len_epoch=len_epoch, type=type, in_channels=in_channels,
                          orientations=orientations, batch_size=batch_size, dtype=data_dtype, norm_type=norm_type,
-                         train=train, available=available)
+                         train=train, available=available, coi=coi)
 
         self.label_path = label_path
         self.coi = coi
