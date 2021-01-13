@@ -111,12 +111,11 @@ class VolumeDataset(data.Dataset):
     :param optional dtype: type of the data (typically uint8)
     :param optional norm_type: type of the normalization (unit, z or minmax)
     :param optional train: train or test data
-    :param optional available: amount of available data
     """
 
     def __init__(self, data_path, input_shape, split_orientation='z', split_location=0.50, scaling=None, len_epoch=1000,
                  type='tif3d', in_channels=1, orientations=(0,), batch_size=1, dtype='uint8', norm_type='unit',
-                 train=True, available=-1, coi=None):
+                 train=True):
         self.data_path = data_path
         self.input_shape = input_shape
         self.split_orientation = split_orientation
@@ -129,7 +128,6 @@ class VolumeDataset(data.Dataset):
         self.batch_size = batch_size
         self.norm_type = norm_type
         self.train = train
-        self.available = available
 
         # load the data
         d = 0 if split_orientation == 'z' else 1 if split_orientation == 'y' else 2
@@ -152,27 +150,6 @@ class VolumeDataset(data.Dataset):
             self.data = \
                 F.interpolate(torch.Tensor(self.data[np.newaxis, np.newaxis, ...]), size=tuple(target_size),
                               mode='area')[0, 0, ...].numpy()
-
-        # select a crop of the data if necessary
-        print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
-            self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
-        if available >= 0:
-            crop, available_coos = _select_subset(self.data, d=available)
-            if coi is not None:  # check whether all classes of interest are in the crop
-                unique = np.unique(crop)
-                v = [u in unique for u in coi]
-                b = np.sum(v) == len(v)
-                while not b:
-                    print_frm('Attempting to find crop with all classes of interest...')
-                    crop, available_coos = _select_subset(self.data, d=available)
-                    unique = np.unique(crop)
-                    v = [u in unique for u in coi]
-                    b = np.sum(v) == len(v)
-                print_frm('Crop with all classes of interest found! ')
-            self.data, self.available_coos = crop, available_coos
-        t_str = 'training' if train else 'testing'
-        print_frm('Used for %s: %d x %d x %d (total: %d)' % (
-            t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
 
     def __getitem__(self, i):
         pass
@@ -219,10 +196,11 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
         super().__init__(data_path, input_shape, split_orientation=split_orientation, split_location=split_location,
                          scaling=scaling, len_epoch=len_epoch, type=type, in_channels=in_channels,
                          orientations=orientations, batch_size=batch_size, dtype=data_dtype, norm_type=norm_type,
-                         train=train, available=available, coi=coi)
+                         train=train)
 
         self.label_path = label_path
         self.coi = coi
+        self.available = available
 
         # load labels
         d = 0 if split_orientation == 'z' else 1 if split_orientation == 'y' else 2
@@ -246,9 +224,27 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
                                         mode='area')[0, 0, ...].numpy()
 
         # select a crop of the data if necessary
+        print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
+        self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
         if available >= 0:
+            crop, available_coos = _select_subset(self.labels, d=available)
+            if coi is not None:  # check whether all classes of interest are in the crop
+                unique = np.unique(crop)
+                v = [u in unique for u in coi]
+                b = np.sum(v) == len(v)
+                while not b:
+                    print_frm('Attempting to find crop with all classes of interest...')
+                    crop, available_coos = _select_subset(self.labels, d=available)
+                    unique = np.unique(crop)
+                    v = [u in unique for u in coi]
+                    b = np.sum(v) == len(v)
+                print_frm('Crop with all classes of interest found! ')
+            self.labels, self.available_coos = crop, available_coos
             z_start, z_stop, y_start, y_stop, x_start, x_stop = self.available_coos
-            self.labels = self.labels[z_start:z_stop, y_start:y_stop, x_start:x_stop]
+            self.data = self.data[z_start:z_stop, y_start:y_stop, x_start:x_stop]
+        t_str = 'training' if train else 'testing'
+        print_frm('Used for %s: %d x %d x %d (total: %d)' % (
+            t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
 
     def __getitem__(self, i):
 
@@ -304,7 +300,7 @@ class UnlabeledVolumeDataset(VolumeDataset):
         super().__init__(data_path, input_shape, split_orientation=split_orientation, split_location=split_location,
                          scaling=scaling, len_epoch=len_epoch, type=type, in_channels=in_channels,
                          orientations=orientations, batch_size=batch_size, dtype=dtype, norm_type=norm_type,
-                         train=train, available=available)
+                         train=train)
 
     def __getitem__(self, i):
 
