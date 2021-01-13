@@ -49,13 +49,14 @@ parser.add_argument("--norm", help="Normalization in the network (batch or insta
 parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
-parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=-1)
+parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=100000)
 
 # optimization parameters
 parser.add_argument("--lr", help="Learning rate of the optimization", type=float, default=1e-3)
 parser.add_argument("--step_size", help="Number of epochs after which the learning rate should decay",
                     type=int, default=10)
 parser.add_argument("--gamma", help="Learning rate decay factor", type=float, default=0.9)
+parser.add_argument("--epochs_src", help="Total number of epochs to pretrain on source", type=int, default=0)
 parser.add_argument("--epochs", help="Total number of epochs to train", type=int, default=250)
 parser.add_argument("--len_epoch", help="Number of iteration in each epoch", type=int, default=100)
 parser.add_argument("--test_freq", help="Number of epochs between each test stage", type=int, default=1)
@@ -137,6 +138,15 @@ net = UNetNoDA2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, activ
 print('[%s] Setting up optimization for training' % (datetime.datetime.now()))
 optimizer = optim.Adam(net.parameters(), lr=args.lr)
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+
+"""
+    Pretrain the network
+"""
+if args.epochs_src > 0:
+    print('[%s] Starting pre-training' % (datetime.datetime.now()))
+    net.train_net(train_loader_src, train_loader_tar_ul, None, test_loader_src, test_loader_tar_ul, test_loader_tar_l,
+                  optimizer, args.epochs_src, scheduler=scheduler, augmenter=augmenter, print_stats=args.print_stats,
+                  log_dir=args.log_dir, device=args.device)
 
 """
     Train the network
