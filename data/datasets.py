@@ -68,30 +68,16 @@ def _validate_shape(input_shape, data_shape, orientation=0, in_channels=1, level
     return tuple(input_shape)
 
 
-def _select_subset(data, d=-1, min_sz=(1, 256, 256)):
+def _select_subset(data, labels, d=0):
 
     # data dimensions
     z, y, x = data.shape
 
     # compute size fraction of data to select
-    z_, y_, x_ = min_sz
-    z_ += ((d - z_ * y_ * x_) // (y_ * x_))
-    z_ = min(z_, z)
-    y_ += ((d - z_ * y_ * x_) // (x_ * z_))
-    y_ = min(y_, y)
-    x_ += ((d - z_ * y_ * x_) // (y_ * z_))
-    x_ = min(x_, x)
-
-    # compute start and stop positions of the fractions
-    z_start = np.random.randint(0, z - z_ + 1)
-    z_stop = z_start + z_
-    y_start = np.random.randint(0, y - y_ + 1)
-    y_stop = y_start + y_
-    x_start = np.random.randint(0, x - x_ + 1)
-    x_stop = x_start + x_
+    z_ = int(z * d)
 
     # select the data and return
-    return data[z_start:z_stop, y_start:y_stop, x_start:x_stop], (z_start, z_stop, y_start, y_stop, x_start, x_stop)
+    return data[:z_], labels[:z_]
 
 
 class VolumeDataset(data.Dataset):
@@ -227,21 +213,7 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
         print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
         self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
         if available >= 0:
-            crop, available_coos = _select_subset(self.labels, d=available)
-            if coi is not None:  # check whether all classes of interest are in the crop
-                unique = np.unique(crop)
-                v = [u in unique for u in coi]
-                b = np.sum(v) == len(v)
-                while not b:
-                    print_frm('Attempting to find crop with all classes of interest...')
-                    crop, available_coos = _select_subset(self.labels, d=available)
-                    unique = np.unique(crop)
-                    v = [u in unique for u in coi]
-                    b = np.sum(v) == len(v)
-                print_frm('Crop with all classes of interest found! ')
-            self.labels, self.available_coos = crop, available_coos
-            z_start, z_stop, y_start, y_stop, x_start, x_stop = self.available_coos
-            self.data = self.data[z_start:z_stop, y_start:y_stop, x_start:x_stop]
+            self.data, self.labels = _select_subset(self.data, self.labels, available)
         t_str = 'training' if train else 'testing'
         print_frm('Used for %s: %d x %d x %d (total: %d)' % (
             t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
@@ -392,7 +364,7 @@ class MultiVolumeDataset(data.Dataset):
             print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
                 data.shape[0], data.shape[1], data.shape[2], data.size))
             if available >= 0:
-                data = _select_subset(data, d=available)
+                data, _ = _select_subset(data, data, d=available)
             t_str = 'training' if train else 'testing'
             print_frm('Used for %s: %d x %d x %d (total: %d)' % (
                 t_str, data.shape[0], data.shape[1], data.shape[2], data.size))

@@ -49,7 +49,7 @@ parser.add_argument("--norm", help="Normalization in the network (batch or insta
 parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
-parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=-1)
+parser.add_argument("--available_target_labels", help="Amount of available target labels (%)", type=float, default=0.0)
 
 # regularization parameters
 parser.add_argument('--lambda_mmd', help='Regularization parameter for the domain confusion', type=float, default=1e-1)

@@ -49,7 +49,7 @@ parser.add_argument("--norm", help="Normalization in the network (batch or insta
 parser.add_argument("--activation", help="Non-linear activations in the network", type=str, default="relu")
 parser.add_argument("--classes_of_interest", help="List of indices that correspond to the classes of interest",
                     type=str, default="0,1")
-parser.add_argument("--available_target_labels", help="Amount of available target labels", type=int, default=100000)
+parser.add_argument("--available_target_labels", help="Amount of available target labels (%)", type=float, default=0.0)
 
 # optimization parameters
 parser.add_argument("--lr", help="Learning rate of the optimization", type=float, default=1e-3)
@@ -151,10 +151,11 @@ if args.epochs_src > 0:
 """
     Train the network
 """
-print('[%s] Starting training' % (datetime.datetime.now()))
-net.train_net(train_loader_src, train_loader_tar_ul, train_loader_tar_l, test_loader_src, test_loader_tar_ul,
-              test_loader_tar_l, optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
-              print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
+if args.available_target_labels > 0:
+    print('[%s] Starting finetuning' % (datetime.datetime.now()))
+    net.train_net(train_loader_tar_l, train_loader_tar_ul, None, test_loader_tar_l, test_loader_tar_ul, test_loader_tar_l,
+                  optimizer, args.epochs, scheduler=scheduler, augmenter=augmenter,
+                  print_stats=args.print_stats, log_dir=args.log_dir, device=args.device)
 
 """
     Validate the trained network
