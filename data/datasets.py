@@ -71,9 +71,9 @@ def _validate_shape(input_shape, data_shape, orientation=0, in_channels=1, level
 def _select_subset(data, labels, n=1, sz_size=(512, 512), min_pos=0.01, coi=(0, 1)):
 
     # data dimensions
-    z = n
-    y = min(sz_size[0], data.shape[1])
-    x = min(sz_size[1], data.shape[2])
+    z = int(n)
+    y = int(min(sz_size[0], data.shape[1]))
+    x = int(min(sz_size[1], data.shape[2]))
     data_ = np.zeros((z, y, x))
     labels_ = np.zeros((z, y, x))
 
