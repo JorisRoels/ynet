@@ -68,16 +68,42 @@ def _validate_shape(input_shape, data_shape, orientation=0, in_channels=1, level
     return tuple(input_shape)
 
 
-def _select_subset(data, labels, d=0):
+def _select_subset(data, labels, n=1, sz_size=(512, 512), min_pos=0.01, coi=(0, 1)):
 
     # data dimensions
-    z, y, x = data.shape
+    z = n
+    y = min(sz_size[0], data.shape[1])
+    x = min(sz_size[1], data.shape[2])
+    data_ = np.zeros((z, y, x))
+    labels_ = np.zeros((z, y, x))
 
-    # compute size fraction of data to select
-    z_ = int(z * d)
+    # constant
+    max_iters = 100
+
+    # select samples
+    for z_ in range(z):
+        found = False
+        iters = 0
+        while not found:
+            iters += 1
+
+            # select sample
+            data_[z_:z_+1], labels_[z_:z_+1] = sample_labeled_input(data, labels, (1, y, x))
+
+            # check f sample is valid
+            nnz = 0
+            for c in coi:
+                if c > 0:
+                    nnz += np.sum(labels_[z_:z_+1] == c)
+            if nnz / (y * x) > min_pos:
+                print_frm('Sample %d successfully found!' % z_)
+                found = True
+            if iters > max_iters:
+                print_frm('Maximum number of iterations reached.. selecting random sample')
+                found = True
 
     # select the data and return
-    return data[:z_], labels[:z_]
+    return data_, labels_
 
 
 class VolumeDataset(data.Dataset):
@@ -212,8 +238,8 @@ class StronglyLabeledVolumeDataset(VolumeDataset):
         # select a crop of the data if necessary
         print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
         self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
-        if available >= 0:
-            self.data, self.labels = _select_subset(self.data, self.labels, available)
+        if available > 0:
+            self.data, self.labels = _select_subset(self.data, self.labels, n=available, coi=coi)
         t_str = 'training' if train else 'testing'
         print_frm('Used for %s: %d x %d x %d (total: %d)' % (
             t_str, self.data.shape[0], self.data.shape[1], self.data.shape[2], self.data.size))
@@ -359,15 +385,6 @@ class MultiVolumeDataset(data.Dataset):
                 target_size = np.asarray(np.multiply(data.shape, scaling), dtype=int)
                 data = F.interpolate(torch.Tensor(data[np.newaxis, np.newaxis, ...]), size=tuple(target_size),
                                      mode='area')[0, 0, ...].numpy()
-
-            # select a crop of the data if necessary
-            print_frm('Original dataset size: %d x %d x %d (total: %d)' % (
-                data.shape[0], data.shape[1], data.shape[2], data.size))
-            if available >= 0:
-                data, _ = _select_subset(data, data, d=available)
-            t_str = 'training' if train else 'testing'
-            print_frm('Used for %s: %d x %d x %d (total: %d)' % (
-                t_str, data.shape[0], data.shape[1], data.shape[2], data.size))
 
             self.data.append(data)
             self.data_sizes.append(data.size)
