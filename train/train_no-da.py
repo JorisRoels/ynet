@@ -130,6 +130,7 @@ test_loader_tar_l = DataLoader(test_tar_l, batch_size=args.test_batch_size)
     Build the network
 """
 print('[%s] Building the network' % (datetime.datetime.now()))
+set_seed(args.seed)
 net = UNetNoDA2D(feature_maps=args.fm, levels=args.levels, norm=args.norm, activation=args.activation,
                  coi=args.classes_of_interest)
 
