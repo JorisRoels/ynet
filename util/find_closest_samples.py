@@ -142,8 +142,8 @@ for d in range(n_domains):
                                       split_location=df['split-location'][d], input_shape=input_shape,
                                       type=df['types'][d], train=False)
         for i in range(n // b):
-            if (i * b) % 50 == 0:
-                print_frm('    Processed %d/%d samples' % (i * b, n))
+            if i % 5 == 0:
+                print_frm('    Processed %d/%d batches' % (i, n // b))
             # sample
             x = np.zeros((b, 1, input_size[0], input_size[1]))
             for j in range(b):
