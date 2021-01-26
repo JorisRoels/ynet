@@ -74,8 +74,8 @@ def _select_subset(data, labels, n=1, sz_size=(512, 512), min_pos=0.01, coi=(0, 
     z = int(n)
     y = int(min(sz_size[0], data.shape[1]))
     x = int(min(sz_size[1], data.shape[2]))
-    data_ = np.zeros((z, y, x))
-    labels_ = np.zeros((z, y, x))
+    data_ = np.zeros((z, y, x), dtype=data.dtype)
+    labels_ = np.zeros((z, y, x), dtype=labels.dtype)
 
     # constant
     max_iters = 100
