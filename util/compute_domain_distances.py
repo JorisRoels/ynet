@@ -153,4 +153,6 @@ for d_src in range(n_domains):
             dl_ = DataLoader(test_src, batch_size=args.batch_size)
             sample_dists[d_src, d_tar] = _dist_data(dl, dl_, net)
 
+# save results
+mkdir(args.log_dir)
 np.save(os.path.join(args.log_dir, 'dom_dists.npy'), sample_dists)
