@@ -148,7 +148,7 @@ for d_src in range(n_domains):
     dl = DataLoader(test_src, batch_size=args.batch_size)
     for d_tar in range(n_domains):
         print_frm('  Processing tar domain %d/%d' % (d_tar, n_domains))
-        if d_src < d_tar:
+        if d_src != d_tar:
             test_tar = dss[d_tar]
             dl_ = DataLoader(test_src, batch_size=args.batch_size)
             sample_dists[d_src, d_tar] = _dist_data(dl, dl_, net)
