@@ -131,21 +131,25 @@ df = json.load(open(data_file))
 n_domains = len(df['raw'])
 input_shape = (1, input_size[0], input_size[1])
 
+# datasets
+dss = []
+for d in range(n_domains):
+    print_frm('Loading %s' % df['raw'][d])
+    dss.append(UnlabeledVolumeDataset(df['raw'][d], split_orientation=df['split-orientation'][d],
+                                      split_location=df['split-location'][d], input_shape=input_shape,
+                                      type=df['types'][d], train=False, len_epoch=n))
+
 # for all other domains, compute embeddings of randomly selected patches
 print_frm('Computing embeddings remaining domains')
 sample_dists = np.zeros((n_domains, n_domains))
 for d_src in range(n_domains):
     print_frm('Processing src domain %d/%d' % (d_src, n_domains))
-    test_src = UnlabeledVolumeDataset(df['raw'][d_src], split_orientation=df['split-orientation'][d_src],
-                                      split_location=df['split-location'][d_src], input_shape=input_shape,
-                                      type=df['types'][d_src], train=False, len_epoch=n)
+    test_src = dss[d_src]
     dl = DataLoader(test_src, batch_size=args.batch_size)
     for d_tar in range(n_domains):
         print_frm('  Processing tar domain %d/%d' % (d_tar, n_domains))
         if d_src != d_tar:
-            test_tar = UnlabeledVolumeDataset(df['raw'][d_tar], split_orientation=df['split-orientation'][d_tar],
-                                              split_location=df['split-location'][d_tar], input_shape=input_shape,
-                                              type=df['types'][d_tar], train=False, len_epoch=n)
+            test_tar = dss[d_tar]
             dl_ = DataLoader(test_src, batch_size=args.batch_size)
             sample_dists[d_src, d_tar] = _dist_data(dl, dl_, net)
 
